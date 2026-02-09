@@ -6,10 +6,16 @@ readme = "README.md"
 requires-python = ">=3.13"
 dependencies = []
 
+[project.scripts]
+kilntainers = "kilntainers.cli:main"
+
+[tool.uv]
+package = true
 
 [dependency-groups]
-test = [
+dev = [
     "pytest>=9.0.2",
+    "pytest-asyncio>=0.26.0",
 ]
 
 [tool.ty.src]
@@ -25,5 +31,7 @@ exclude = []
 extend-select = ["I","F401","RUF","TID"]
 
 [tool.pytest.ini_options]
+asyncio_mode = "auto"
 markers = [
+    "docker_integration: marks tests that require Docker (deselect with '-m \"not docker_integration\"')",
 ]

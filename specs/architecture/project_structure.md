@@ -314,8 +314,8 @@ uv run pytest
 pytest markers to control which tests run:
 
 ```python
-# in conftest.py or pyproject.toml
-@pytest.mark.integration  # requires Docker
+# in pyproject.toml
+@pytest.mark.docker_integration  # requires Docker
 ```
 
-`checks.sh` and CI run unit and integration tests as separate steps for clear signal.
+`checks.sh` and CI run unit and docker integration tests as separate steps for clear signal.

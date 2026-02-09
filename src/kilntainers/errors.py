@@ -1,0 +1,1 @@
+"""Exception hierarchy for kilntainers."""

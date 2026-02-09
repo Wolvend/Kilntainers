@@ -1,6 +1,6 @@
 Each phase should follow this pattern:
 
-- Read the `specs/implementation_plan.md` 
+- Read the `specs/implementation_plan.md` for a list of phases
 - Choose what the next step of implementation is based on the checkmarks in implementation plan, and confirm that isn’t already done in src. Confirm with user it's the right thing to work on (if they didn't already tell you which phase to do)
 - Check if we already have a phase plan for this step, if so can skip reading architecture doc. If not:
    read `specs/architecture/architecture_summary.md` and related docs 
@@ -15,5 +15,6 @@ Each phase should follow this pattern:
 - Self code review your new work for issues.
 - Write tests for the the component/step.
 - Run tests. Iterate until build and tests pass. See `CLAUDE.md` for commands.
+- Run check_all mcp server. Fix any issues, and iterate until it passes. Do not end implementation phased without all checks passing.
 - Mark the step as complete in `specs/implementation_plan.md`. Only edit this file to toggle checkboxes, nothing else.
 - Stop after a single phase is done, don’t continue until asked.

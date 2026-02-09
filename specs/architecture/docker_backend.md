@@ -946,7 +946,7 @@ async def docker_sandbox():
 
 ### 8.3 Test Utilities
 
-A `skip_without_docker` marker for integration tests:
+A `skip_without_docker` marker for docker integration tests:
 
 ```python
 import shutil
@@ -958,7 +958,7 @@ skip_without_docker = pytest.mark.skipif(
 )
 ```
 
-Applied to all integration test classes/modules. CI runs on `ubuntu-latest` which includes Docker; local development environments may not.
+Applied to all docker integration test classes/modules with `@pytest.mark.docker_integration`. CI runs on `ubuntu-latest` which includes Docker; local development environments may not.
 
 ---
 

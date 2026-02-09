@@ -8,22 +8,22 @@ Phased implementation plan. Each phase builds on the previous one and produces t
 
 ---
 
-## Phase 1: Project Skeleton
+## Phase 1: Project Skeleton ✅
 
 Set up the `src/kilntainers/` package layout, entry points, and build configuration.
 
 **What to build:**
 
-- [ ] Create `src/kilntainers/` package directory with `__init__.py`
-- [ ] Create `__main__.py` (placeholder for `python -m kilntainers`)
-- [ ] Create empty module files: `cli.py`, `config.py`, `server.py`, `errors.py`
-- [ ] Create `backends/` subpackage with `__init__.py`, `base.py`, `docker.py` (empty stubs)
-- [ ] Update `pyproject.toml`: add `[project.scripts]` entry point, configure pytest (asyncio_mode, markers for integration tests), add pytest-asyncio dev dependency
-- [ ] Verify `uv run ./checks.sh` passes on the skeleton
+- [x] Create `src/kilntainers/` package directory with `__init__.py`
+- [x] Create `__main__.py` (placeholder for `python -m kilntainers`)
+- [x] Create empty module files: `cli.py`, `config.py`, `server.py`, `errors.py`
+- [x] Create `backends/` subpackage with `__init__.py`, `base.py`, `docker.py` (empty stubs)
+- [x] Update `pyproject.toml`: add `[project.scripts]` entry point, configure pytest (asyncio_mode, markers for docker_integration tests), add pytest-asyncio dev dependency
+- [x] Verify `uv run ./checks.sh` passes on the skeleton
 
 **Architecture reference:** [project_structure.md](architecture/project_structure.md) §1–§10
 
-**Convention override:** Tests are co-located beside the files they test with a `test_` prefix (e.g., `errors.py` → `test_errors.py`, `backends/docker.py` → `backends/test_docker.py`), not in a separate `tests/` directory. Integration tests that require Docker use a `_integration` suffix (e.g., `backends/test_docker_integration.py`) and are marked with `@pytest.mark.integration`.
+**Convention override:** Tests are co-located beside the files they test with a `test_` prefix (e.g., `errors.py` → `test_errors.py`, `backends/docker.py` → `backends/test_docker.py`), not in a separate `tests/` directory. Integration tests that require Docker use a `_integration` suffix (e.g., `backends/test_docker_integration.py`) and are marked with `@pytest.mark.docker_integration`.
 
 ---
 
@@ -56,7 +56,7 @@ Implement `DockerBackend` and `DockerSandbox` — the full Docker container life
 - [ ] `backends/docker.py` — `DockerSandbox` class: `exec()` with lock, `_do_exec()` (subprocess, timeout via `asyncio.wait_for`, output limit via `_communicate_with_limit`), `_build_exec_command()`, `stop()` (idempotent, best-effort), `wait_for_death()` (docker wait + stop-requested flag), `sandbox_id` property
 - [ ] `backends/docker.py` — `_OutputLimitExceeded` private exception, `_run_docker` CLI helper
 - [ ] Unit tests (`backends/test_docker.py`): mock `asyncio.create_subprocess_exec` to test command construction, timeout handling, output limit enforcement, stdin piping, stop idempotency, death detection, tool instructions (default vs custom image), docker run command assembly
-- [ ] Integration tests (`backends/test_docker_integration.py`, marked `@pytest.mark.integration`): basic exec, command vs args mode, working directory, stdin piping, timeout with real sleep, output limit with real output, stateless execution, network isolation, death detection (docker kill), container cleanup after stop, label verification
+- [ ] Integration tests (`backends/test_docker_integration.py`, marked `@pytest.mark.docker_integration`): basic exec, command vs args mode, working directory, stdin piping, timeout with real sleep, output limit with real output, stateless execution, network isolation, death detection (docker kill), container cleanup after stop, label verification
 
 **Architecture reference:** [docker_backend.md](architecture/docker_backend.md) §2–§9
 
