@@ -17,5 +17,3 @@ Each phase should follow this pattern:
 - Run tests. Iterate until build and tests pass. See `CLAUDE.md` for commands.
 - Mark the step as complete in `specs/implementation_plan.md`. Only edit this file to toggle checkboxes, nothing else.
 - Stop after a single phase is done, don’t continue until asked.
-
-Special case: for GCS steps, you may require environment setup. Work with me on test plan using a API key, and pytest marker

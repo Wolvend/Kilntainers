@@ -14,7 +14,7 @@ This repository has detailed specs, and follows spec-driven design. Key files in
 
 ## Commands & Tools
 
-You have access ot a MCP server to running tools like lint, format, types, test.
+You have access ot a MCP server to running tools like lint, format, types, test. Generally prefer using the MCP commands to bash as these are pre-vetted and approved.
 
 We use:
  - ruff for formatting: `uvx ruff format` to fix issues

@@ -86,7 +86,7 @@ This section tracks the creation of detailed architecture documents. Unlike the 
 
 ### Spec Phases
 
-Note: if you're asked to implement a "phase" it's refering to a phase from `specs/implementation_plan.md` NOT THESE
+Note: if you're asked to implement a "phase" it's referring to a phase from `specs/implementation_plan.md` NOT THESE
 
 - [x] **Phase 1: Project structure & packaging** (`project_structure.md`)
   Python package layout, directory structure, entry points, dependency management (pyproject.toml / requirements), and naming conventions. Establishes the skeleton everything else lives in.
