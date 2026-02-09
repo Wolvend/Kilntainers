@@ -64,13 +64,13 @@ Kilntainers exposes exactly one MCP tool: `shell_exec`. (D9)
 
 - **`args`** (string array) — The first element is the executable path or name; remaining elements are arguments. No shell is involved — arguments are passed directly to the process via exec. No pipes, redirects, globbing, or variable expansion. Use for programmatic calls where exact argument integrity matters (e.g., passing strings with special characters to a text editor tool). (D15)
 
-- **`stdin`** (string, optional) — Content piped to the command's standard input, bypassing shell argument parsing entirely. Usable with either `command` or `args` mode. This is the primary mechanism for passing data without shell escaping — e.g., `command: "cat > file.txt"` with file content in `stdin`. Subject to a 2 MiB size limit (matching the output limit default). If the content exceeds the limit, the call returns an MCP error without executing the command. (D30)
+- **`stdin`** (string, optional) — Content piped to the command's standard input, bypassing shell argument parsing entirely. Usable with either `command` or `args` mode. This is the primary mechanism for passing data without shell escaping — e.g., `command: "cat > file.txt"` with file content in `stdin`. Subject to a fixed 2 MiB size limit (not configurable, does not track `--output-limit`). If the content exceeds the limit, the call returns an MCP error without executing the command. (D30, D32)
 
 - **`working_directory`** (string, optional) — Absolute path within the sandbox. Default: the sandbox's working directory as configured by the image (e.g., Dockerfile `WORKDIR`), falling back to `/` if not set. (D13)
 
 - **`timeout`** (integer, optional) — Seconds. Overrides the server-configured default for this call only. No enforced maximum — practical limits depend on the MCP client's own timeout configuration. (D21, D25)
 
-**Validation:** Exactly one of `command` or `args` must be provided. Both present → MCP error. Neither present → MCP error. If `working_directory` is provided, it must be an absolute path. If `stdin` exceeds 2 MiB, return an MCP error.
+**Validation:** Exactly one of `command` or `args` must be provided. Both present → MCP error. Neither present → MCP error. If `working_directory` is provided, it must be an absolute path. If `stdin` exceeds 2 MiB (fixed limit, not configurable), return an MCP error. (D32)
 
 ### 2.2 Response Format
 
@@ -143,7 +143,7 @@ Commands that fail (non-zero exit code) are **not** MCP errors. They are success
 
 - **Stateless:** Each call is independent. No shell session persists between calls. Working directory, shell variables, environment changes, and background processes do not carry over. To run multiple commands in context, chain them in one call (e.g., `cd /app && make test`).
 - **Serial within a sandbox:** Exec calls to the same sandbox are queued and run one at a time. This is a v1 implementation detail, not an API contract — the API does not mention or enforce serialization. (D4, D29)
-- **Stdin:** If the `stdin` parameter is provided, its content is piped to the command's standard input. If `stdin` is not provided, stdin is not connected and commands that attempt to read from it receive EOF immediately. Either way, commands run non-interactively — interactive tools (vim, less, etc.) will not work. `stdin` content is limited to 2 MiB. (D30)
+- **Stdin:** If the `stdin` parameter is provided, its content is piped to the command's standard input. If `stdin` is not provided, stdin is not connected and commands that attempt to read from it receive EOF immediately. Either way, commands run non-interactively — interactive tools (vim, less, etc.) will not work. `stdin` content is limited to 2 MiB (fixed, not configurable). (D30, D32)
 - **No `env` parameter:** Set environment variables inline: `FOO=bar some_command`. (D21)
 
 ---
@@ -392,17 +392,22 @@ The `shell_exec` tool's `description` field — the text the LLM sees — is ass
 
 ## 7. Docker Backend: Default Tool Description
 
-The Docker backend's `tool_instructions()` returns this text (with configured values substituted):
+The Docker backend's `tool_instructions()` returns this text when using the **default image** (`debian:bookworm-slim`). Dynamic values are substituted from the server's actual configuration:
 
-> Execute a shell command in an isolated Debian Linux sandbox. Commands run in bash. Each call is independent — no state (shell variables, working directory, background processes) persists between calls. Use the working_directory parameter or chain commands with && to control execution context.
+> Execute a shell command in an isolated Debian Linux sandbox. Commands run in **{shell}**. Each call is independent — no state (shell variables, working directory, background processes) persists between calls. Use the working_directory parameter or chain commands with && to control execution context.
 >
-> To write files or pass data without shell escaping, use the stdin parameter (e.g., command="cat > file.txt" with content in stdin). Commands time out after 120 seconds by default (override with the timeout parameter for long-running operations).
+> To write files or pass data without shell escaping, use the stdin parameter (e.g., command="cat > file.txt" with content in stdin). Commands time out after **{timeout}** seconds by default (override with the timeout parameter for long-running operations).
 
 *Note: this is a rough draft. The `stdin` guidance and overall wording should be refined during implementation to ensure LLMs learn the pattern effectively. (D30)*
 
-The **120 seconds** and **2 MB** values in this text reflect the server's actual configured `--timeout` and `--output-limit`, not hardcoded defaults. If the user starts the server with `--timeout 300 --output-limit 10485760`, the description says "300 seconds" and "10 MB."
+**Dynamic values** in the description reflect the server's actual configuration, not hardcoded defaults:
 
-When a custom image is configured, no description is returned. The user must provide a tool description override. 
+- **`{shell}`** — the basename of `--shell` (e.g., `bash`, `sh`). Default: `bash`.
+- **`{timeout}`** — from `--timeout`. Default: `120`.
+
+For example, `--shell /bin/sh --timeout 300` produces *"Commands run in sh"* and *"time out after 300 seconds."*
+
+**Custom image behavior:** If `--image` is set to anything other than the default (`debian:bookworm-slim`), the Docker backend returns **no description** (`null`). The baked-in description is written for the default Debian image and is not intended to describe arbitrary images. The server will fail to start unless the user provides `--tool-instruction-override` to describe their custom image's capabilities. (See §6 rule 3 for the error message.)
 
 ---
 
@@ -563,11 +568,13 @@ The following open items from [spec_queue.md](spec_queue.md) were resolved in th
 | **Resource defaults (Docker)** | No explicit limits by default (Docker defaults). Operators set limits for production. | §3.2 |
 | **Container startup flow** | Pull → create/start → verify readiness → accept calls. Pull failure = startup error. | §4.3 |
 | **Docker config approach** | Flat CLI args for v1 with `--docker-run-flag` escape hatch for uncovered options. | §3.2 |
-| **Tool description text** | Drafted for Docker backend with dynamic timeout and output limit values. | §7 |
+| **Tool description text** | Drafted for Docker backend with dynamic shell, timeout, and output limit values. Custom image → no description, requires override. | §7 |
 | **Startup parameters** | Full schema in §3 including transport, host, port, session-timeout. | §3.1, §3.2 |
 | **Connection lifecycle** | stdio: one sandbox per process. Streamable HTTP: one sandbox per session, identified by Mcp-Session-Id. 5-minute idle timeout (configurable). | §4 |
 | **Security model** | Threat model covering exfiltration, resource abuse, container escape, host access, and HTTP exposure. | §9 |
 | **D8 transport correction** | Streamable HTTP, not SSE. These are different transports; SSE is deprecated. D8 updated. | §1 |
+| **No additional logging** | No logging system in v1. Focus on great error responses. Standard HTTP logging via reverse proxy if needed. (D31) | — |
+| **Stdin size limit** | Fixed at 2 MiB, not configurable, does not track `--output-limit`. (D32) | §2.1 |
 
 **Deferred:**
 

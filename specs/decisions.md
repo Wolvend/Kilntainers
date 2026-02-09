@@ -268,7 +268,7 @@ No custom fields for `timed_out` or `output_limit_exceeded`. These conditions ar
 
 ## D24: Output Limit -- Error, Don't Truncate
 
-**Decision:** If command output (stdout or stderr) exceeds a configurable limit (default 2MB), the command is killed and an error is returned: non-zero exit code with a clear stderr message explaining the output exceeded the limit. The oversized output is *not* returned (not even partially).
+**Decision:** If command output (stdout or stderr) exceeds a configurable limit (default 2 MiB), the command is killed and an error is returned: non-zero exit code with a clear stderr message explaining the output exceeded the limit. The oversized output is *not* returned (not even partially).
 
 Configurable at startup via `--output-limit` flag.
 
@@ -294,7 +294,7 @@ Configurable at startup via `--output-limit` flag.
 
 ## D27: Binary Output -- No Special Handling
 
-**Decision:** No special detection or handling of binary output. Binary data will be mangled through UTF-8 string encoding in stdout/stderr. The 2MB output limit (D24) protects against massive binary blobs.
+**Decision:** No special detection or handling of binary output. Binary data will be mangled through UTF-8 string encoding in stdout/stderr. The 2 MiB output limit (D24) protects against massive binary blobs.
 
 **Rationale:** Not worth the complexity for v1. Agents will see garbage and learn not to cat binary files. The output limit keeps it bounded.
 
@@ -343,3 +343,23 @@ The API must be clean: no global state, no singleton sandbox. Each sandbox is an
 **Backend contract:** All backends must support piping `stdin` content to the process (Docker: `docker exec -i`, subprocess: `communicate(input=...)`).
 
 **Tool description:** Must be updated to explain `stdin` usage patterns, particularly `cat > file` + `stdin` for file writing. Exact wording to be finalized during implementation.
+
+---
+
+## D31: No Additional Logging -- Focus on Great Errors
+
+**Decision:** No dedicated logging system in v1. The MCP server does not write log files or structured log output beyond what is needed for startup errors and image pull progress (both on stderr).
+
+**Rationale:** In stdio mode — the primary transport — stderr is the only available channel, and it's shared with the MCP protocol's own error reporting. Adding logging infrastructure creates noise without clear value. The better investment is making every error response (MCP errors, timeout messages, output limit messages, sandbox death reports) clear, actionable, and self-explanatory. If the error responses are good enough, operators don't need logs to diagnose issues — the agent's conversation history contains everything.
+
+**For Streamable HTTP mode:** The same principle applies. Standard HTTP request logging (if desired) can be handled by a reverse proxy in front of the server, which is already recommended for production deployments (D8, §9).
+
+**Future:** If demand arises, a `--verbose` or `--log-level` flag can be added without changing the architecture. But the v1 bet is that great errors are more valuable than great logs.
+
+---
+
+## D32: Stdin Size Limit -- Fixed at 2 MiB
+
+**Decision:** The `stdin` parameter size limit is always 2 MiB (2,097,152 bytes). It is not configurable and does not track the `--output-limit` setting.
+
+**Rationale:** The stdin limit and output limit serve different purposes. The output limit protects LLM context windows from oversized responses and varies by use case (some users want 10 MiB output for data processing). The stdin limit protects the server from oversized input payloads — 2 MiB is generous for any reasonable stdin use case (file writes, data piping). Users needing to transfer larger data into the sandbox should use alternative approaches (split across multiple calls, pre-bake into custom images, or the future mapped working directory feature). A fixed limit keeps the interface simple — one fewer knob to configure.
