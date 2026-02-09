@@ -7,16 +7,16 @@ actions:
     command: "uv run ./checks.sh"
 
   - name: "all_python_tests"
-    description: "Run all python tests in the project (skips paid tests by default, skips slow docker integration tests)"
-    command: "uv run python -m pytest --benchmark-quiet -q -m 'not docker_integration' ."
+    description: "Run all python tests in the project (skips paid tests by default, skips slow docker integration tests, parallelized)"
+    command: "uv run python -m pytest --benchmark-quiet -q -m 'not docker_integration' -n auto ."
 
   - name: "all_python_tests_including_paid"
     description: "Run all python tests including paid API tests (costs money!)"
     command: "uv run python -m pytest --benchmark-quiet -q --runpaid ."
 
   - name: "docker_integration_tests"
-    description: "Run only docker integration tests (requires Docker daemon, slow)"
-    command: "uv run python -m pytest --benchmark-quiet -v -m docker_integration ."
+    description: "Run only docker integration tests (requires Docker daemon, slow, parallelized)"
+    command: "uv run python -m pytest --benchmark-quiet -v -m docker_integration -n auto ."
 
   - name: "lint_python"
     description: "Lint the python source code, checking for errors and warnings"
