@@ -50,13 +50,11 @@ Kilntainers exposes exactly one MCP tool: `shell_exec`. (D9)
       "minimum": 1,
       "description": "Maximum execution time in seconds. Overrides the server-configured default."
     }
-  },
-  "oneOf": [
-    { "required": ["command"] },
-    { "required": ["args"] }
-  ]
+  }
 }
 ```
+
+**Mutual exclusivity:** Exactly one of `command` or `args` must be provided. Both present or neither present results in an MCP error (`isError: true`). This constraint is enforced by server-side validation rather than JSON Schema's `oneOf`, because the MCP SDK's tool registration auto-generates schemas from function signatures and does not support `oneOf`. The property descriptions indicate the mutual exclusivity to LLM clients.
 
 **Parameter details:**
 

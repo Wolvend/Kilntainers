@@ -95,7 +95,7 @@ This section tracks the creation of detailed architecture documents. Unlike the 
 - [x] **Phase 3: Docker backend implementation** (`docker_backend.md`)
   How the Docker backend implements the abstraction: subprocess calls to the Docker CLI, container create/start/exec/stop flows, `--rm` and labeling, image pull mechanics, readiness checks, timeout and output-limit enforcement at the process level, death detection, and resource limit passthrough.
 
-- [ ] **Phase 4: MCP server & tool layer** (`mcp_server.md`)
+- [x] **Phase 4: MCP server & tool layer** (`mcp_server.md`)
   How the MCP server is structured. Tool registration, request validation, response formatting, tool description assembly, and how the server delegates to the backend. Covers both stdio and Streamable HTTP wiring. Note: the MCP Python ecosystem has two libraries — `mcp` (official low-level SDK) and `FastMCP` (higher-level, separate project). This phase should evaluate and decide which to use.
 
 - [ ] **Phase 5: CLI, configuration & startup** (`cli_and_startup.md`)
