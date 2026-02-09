@@ -1,0 +1,56 @@
+# HooksMCP Configuration File for use with Kiln
+# https://github.com/scosman/hooks_mcp
+
+actions:
+  - name: "all_python_tests"
+    description: "Run all python tests in the project (skips paid tests by default)"
+    command: "uv run python -m pytest --benchmark-quiet -q ."
+
+  - name: "all_python_tests_including_paid"
+    description: "Run all python tests including paid API tests (costs money!)"
+    command: "uv run python -m pytest --benchmark-quiet -q --runpaid ."
+
+  - name: "lint_python"
+    description: "Lint the python source code, checking for errors and warnings"
+    command: "uvx ruff check"
+
+  - name: "lint_fix_python"
+    description: "Lint the pythong source code, fixing errors and warnings which it can fix. Not all errors can be fixed automatically."
+    command: "uvx ruff check --fix"
+
+  - name: "check_format_python"
+    description: "Check if the python source code is formatted correctly"
+    command: "uvx ruff format --check ."
+
+  - name: "format_python"
+    description: "Format the python source code"
+    command: "uvx ruff format ."
+
+  - name: "typecheck_python"
+    description: "Typecheck the source code"
+    command: "uvx ty check"
+
+  - name: "test_file_python"
+    description: "Run tests in a specific python file or directory"
+    command: "uv run python -m pytest $TEST_PATH"
+    parameters:
+      - name: "TEST_PATH"
+        type: "project_file_path"
+        description: "Path to test file or directory"
+
+  - name: "test_specific_python"
+    description: "Run a specific python test by name"
+    command: "uv run python -m pytest $TEST_PATH -k $TEST_NAME"
+    parameters:
+      - name: "TEST_PATH"
+        type: "project_file_path"
+        description: "Path to test file or directory"
+        default: "./tests"
+      - name: "TEST_NAME"
+        type: "insecure_string"
+        description: "Name of the test to run"
+
+prompts:
+  - name: "python_test_guide.md"
+    description: "Guide for testing best practices for python code"
+    prompt-file: "agents/python_test_guide.md"

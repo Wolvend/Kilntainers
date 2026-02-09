@@ -1,0 +1,29 @@
+[project]
+name = "kilntainers"
+version = "0.1.0"
+description = "Secure Agent Sandboxes"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = []
+
+
+[dependency-groups]
+test = [
+    "pytest>=9.0.2",
+]
+
+[tool.ty.src]
+exclude = ["**/.venv"]
+
+[tool.ruff]
+exclude = []
+
+[tool.ruff.lint]
+# I is import sorting
+# F401 is unused imports
+# RUF is ruff rules. In particular 012+008 are mutable defaults (important)
+extend-select = ["I","F401","RUF","TID"]
+
+[tool.pytest.ini_options]
+markers = [
+]

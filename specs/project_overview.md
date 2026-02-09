@@ -42,7 +42,7 @@ MCP server startup takes a number of parameters which control which sandbox is c
 
 These are simply CLI params, passed when the server starts up. You can't run 1 instance with multuple backends (one docker, one WASI), or 1 instance with multiple configs (2 different docker images). However, you can simply run several instances.
 
-On startup the selected backend will validate and parse params. It should raise user-facing startup errors immediatly on statup if the parameters aren't valid.
+On startup the selected backend will validate and parse params. It should raise user-facing startup errors immediately on statup if the parameters aren't valid.
 
 TBD: should we namespace backend params? All docker params start with "docker-"?
 
@@ -58,8 +58,8 @@ TBD: should we namespace backend params? All docker params start with "docker-"?
 
 I'm leaning towards keeping the API exposed to agents over MCP extremely simple: 1 "exec" tool
 
- - There isn't an long running shell / each exec call is independent. Calling "cd A_DIR" then "ls" in 2 calls will will list the root directory not A_DIR. However you could call "cd a && ls" in 1 exec for the desired effect.
- - working_directory: [optional], the working directory to run the command in. If omitted, whatever this container considers it's root dir (could be "~"). Similar to calling exec with "cd working_directory && some_command"
+ - There isn't an long running shell / each exec call is independent. Calling "cd A_DIR" then "ls" in 2 calls will will list the root directory not A_DIR. However you could call "cd a & ls" in 1 exec for the desired effect.
+ - working_directory: [optional], the working directory to run the command in. If omitted, whatever this container considers it's root dir (could be "~"). Similar to calling exec with "cd working_directory & some_command"
  - Return type is an object with stdout, stderr, and status code
  - Technical open: how do we allow passing commands and escaping
    - array of commands for escaping. Passing ["echo", "A\nman\nby\nthe\nsea", ">", "poem.txt"]
@@ -80,7 +80,7 @@ I'm leaning towards keeping the API exposed to agents over MCP extremely simple:
 start/shutdown: not exposed directly to agents via MCP. When you establish a connection it starts up sandbox, when you shutdown the connection it shuts down the sandbox.
 
  - stdio based MCP servers: 1 container for lifetime of server (as that's the connection)
- - Streamable HTTP: 1 container per session for lifetime of session.
+ - https streaming: 1 container per connection for lifetime of connection.
 
 ## Tech Stack
 
@@ -100,7 +100,7 @@ OpenCode:
  - read: read fileby path, with optional offset and limit
  - write: write whole file by path
  - edit tool: edit file by path doing a search and replace. oldString (anchor), newString, replaceAll?
- - multi-edit: may muliple edits to a file 
+ - multi-edit: may multiple edits to a file 
 
  Claude:
  - a command [view, str_replace, create, insert, undo_edit], a path, and option. Insert is line-number based insert.

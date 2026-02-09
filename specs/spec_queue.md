@@ -84,7 +84,9 @@ This section tracks the creation of detailed architecture documents. Unlike the 
 4. **Review each phase with the user before marking complete.** Present key decisions and design details for confirmation. When confirmed, mark the phase `[x]` below.
 5. **After all phases are complete**, write `specs/architecture/architecture_summary.md` — a short index document that points to each sub-document with a high-level description of what it covers.
 
-### Phases
+### Spec Phases
+
+Note: if you're asked to implement a "phase" it's refering to a phase from `specs/implementation_plan.md` NOT THESE
 
 - [x] **Phase 1: Project structure & packaging** (`project_structure.md`)
   Python package layout, directory structure, entry points, dependency management (pyproject.toml / requirements), and naming conventions. Establishes the skeleton everything else lives in.
