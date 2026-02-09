@@ -160,10 +160,12 @@ Kilntainers is configured through CLI parameters at startup. One server instance
 | `--tool-instruction-override` | string | — | Replaces the entire tool description. (D16) |
 | `--session-timeout` | integer (sec) | `300` | Idle session timeout (HTTP mode only). |
 
+> **Note:** `--session-timeout` only applies to Streamable HTTP mode, where the server manages multiple concurrent sessions. In stdio mode, the session lives as long as the process runs. Passing session-timeout when stdio should error explaining why.
+
 **Constraints:**
 
 - `--extended-tool-instruction` and `--tool-instruction-override` are mutually exclusive. Providing both is a startup error. (D16)
-- `--host`, `--port`, and `--session-timeout` are ignored in stdio mode.
+- `--host`, `--port`, and `--session-timeout` error if passed to stdio mode where they do no apply.
 - `--host` defaults to `127.0.0.1` (localhost only) for security. Set to `0.0.0.0` for remote access — see Section 9 security notes.
 
 ### 3.2 Docker Backend Parameters (V1)
@@ -176,7 +178,7 @@ Kilntainers is configured through CLI parameters at startup. One server instance
 | `--memory` | string | *(no limit)* | Docker memory limit (e.g., `"512m"`). |
 | `--docker-run-flag` | string | *(none)* | Additional flags passed to `docker run`. Repeatable. |
 
-Backend parameters are flat CLI args, not namespaced. Only one backend runs per instance, so no collision risk. (D12)
+Backend parameters are flat CLI args, not namespaced. Only one backend runs per instance, so no collision risk. (D12). "--help" page should be organized/sorted by backend.
 
 Resource limits (CPU, memory) default to no explicit limits — Docker defaults apply. For shared or production deployments, setting resource limits is recommended. (D26)
 
