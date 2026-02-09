@@ -101,13 +101,13 @@ This section tracks the creation of detailed architecture documents. Unlike the 
 - [x] **Phase 5: CLI, configuration & startup** (`cli_and_startup.md`)
   Argument parsing (library choice, arg definitions), startup validation sequence, how backend-specific args are routed, configuration objects, and the full startup flow from process launch to "ready to accept connections."
 
-- [ ] **Phase 6: Connection & session lifecycle** (`connection_lifecycle.md`)
+- [x] **Phase 6: Connection & session lifecycle** (`connection_lifecycle.md`)
   How stdio and Streamable HTTP transports map to sandbox lifecycles. Session tracking for HTTP (creation, idle timeout, teardown), sandbox ownership, graceful shutdown orchestration, and sandbox death propagation to the MCP layer.
 
-- [ ] **Phase 7: Error handling & observability** (`error_handling.md`)
+- [x] **Phase 7: Error handling & observability** (`error_handling.md`)
   Error propagation paths from backend through MCP layer to client. How timeout, output-limit, sandbox death, and validation errors are caught, transformed, and reported. Startup error reporting. Stderr usage patterns. Any structured error types or exception hierarchy.
 
 ### Completion
 
-- [ ] **Architecture summary** (`architecture_summary.md`)
+- [x] **Architecture summary** (`architecture_summary.md`)
   Written after all phases above are complete. A short document that lists each sub-document with a 1–2 sentence description of what it covers, serving as the entry point for anyone reading the architecture docs.
