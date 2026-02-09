@@ -37,6 +37,10 @@ Kilntainers exposes exactly one MCP tool: `shell_exec`. (D9)
       "items": { "type": "string" },
       "description": "Command and arguments as an array. The first element is the executable; remaining elements are arguments passed directly with no shell interpretation. Mutually exclusive with command."
     },
+    "stdin": {
+      "type": "string",
+      "description": "Content to pipe to the command's standard input. Use with command mode to pass data without shell escaping (e.g., command='cat > file.txt' with file content in stdin)."
+    },
     "working_directory": {
       "type": "string",
       "description": "Absolute path to the working directory. Defaults to the sandbox's configured working directory."
@@ -60,11 +64,13 @@ Kilntainers exposes exactly one MCP tool: `shell_exec`. (D9)
 
 - **`args`** (string array) — The first element is the executable path or name; remaining elements are arguments. No shell is involved — arguments are passed directly to the process via exec. No pipes, redirects, globbing, or variable expansion. Use for programmatic calls where exact argument integrity matters (e.g., passing strings with special characters to a text editor tool). (D15)
 
+- **`stdin`** (string, optional) — Content piped to the command's standard input, bypassing shell argument parsing entirely. Usable with either `command` or `args` mode. This is the primary mechanism for passing data without shell escaping — e.g., `command: "cat > file.txt"` with file content in `stdin`. Subject to a 2 MiB size limit (matching the output limit default). If the content exceeds the limit, the call returns an MCP error without executing the command. (D30)
+
 - **`working_directory`** (string, optional) — Absolute path within the sandbox. Default: the sandbox's working directory as configured by the image (e.g., Dockerfile `WORKDIR`), falling back to `/` if not set. (D13)
 
 - **`timeout`** (integer, optional) — Seconds. Overrides the server-configured default for this call only. No enforced maximum — practical limits depend on the MCP client's own timeout configuration. (D21, D25)
 
-**Validation:** Exactly one of `command` or `args` must be provided. Both present → MCP error. Neither present → MCP error. If `working_directory` is provided, it must be an absolute path.
+**Validation:** Exactly one of `command` or `args` must be provided. Both present → MCP error. Neither present → MCP error. If `working_directory` is provided, it must be an absolute path. If `stdin` exceeds 2 MiB, return an MCP error.
 
 ### 2.2 Response Format
 
@@ -127,6 +133,7 @@ When combined output exceeds the limit:
 | Command fails (non-zero exit) | `false` | Normal response with the command's exit code |
 | Timeout | `false` | exit_code 124, no output, stderr notice only |
 | Output limit exceeded | `false` | exit_code 1, no output, stderr notice only |
+| Stdin limit exceeded | `true` | MCP error message; command is not executed (D30) |
 | Invalid parameters | `true` | MCP error message describing the validation failure |
 | Sandbox dead | `true` | MCP error message; connection drops after response (D23) |
 
@@ -136,7 +143,7 @@ Commands that fail (non-zero exit code) are **not** MCP errors. They are success
 
 - **Stateless:** Each call is independent. No shell session persists between calls. Working directory, shell variables, environment changes, and background processes do not carry over. To run multiple commands in context, chain them in one call (e.g., `cd /app && make test`).
 - **Serial within a sandbox:** Exec calls to the same sandbox are queued and run one at a time. This is a v1 implementation detail, not an API contract — the API does not mention or enforce serialization. (D4, D29)
-- **No stdin:** Stdin is not connected. Commands run non-interactively. Commands that attempt to read from stdin receive EOF immediately. Interactive tools (vim, less, etc.) will not work.
+- **Stdin:** If the `stdin` parameter is provided, its content is piped to the command's standard input. If `stdin` is not provided, stdin is not connected and commands that attempt to read from it receive EOF immediately. Either way, commands run non-interactively — interactive tools (vim, less, etc.) will not work. `stdin` content is limited to 2 MiB. (D30)
 - **No `env` parameter:** Set environment variables inline: `FOO=bar some_command`. (D21)
 
 ---
@@ -189,7 +196,7 @@ Resource limits (CPU, memory) default to no explicit limits — Docker defaults 
 
 On startup, before creating any sandbox or accepting connections:
 
-1. **Parse and validate CLI arguments.** Reject unknown args, invalid types, and conflicting params (e.g., both override and extended instruction).
+1. **Parse and validate CLI arguments.** Reject unknown args, invalid types, and conflicting params (e.g., both override and extended instruction). This includes validation at for library side (MCP config), and the selected backend should validate backend specific args.
 2. **Assemble tool description** (see Section 6). Fail if the result is empty.
 3. **Backend validation.** The backend checks its prerequisites. For Docker:
    - Verify the container engine is reachable (`{engine} info`, where `{engine}` is the configured `--engine` value).
@@ -256,7 +263,7 @@ Shutdown sequence:
 
 1. Any in-flight exec is **killed immediately.** The client is disconnecting — no one will receive the result.
 2. The sandbox is stopped (e.g., `docker stop`).
-3. Sandbox resources are cleaned up (e.g., container removed).
+3. Sandbox resources are cleaned up. (For Docker, `--rm` handles this automatically when the container stops; other future backends may require explicit cleanup.)
 4. If cleanup takes more than **10 seconds**, force-kill and proceed.
 
 ### 4.5 Sandbox Death
@@ -285,10 +292,24 @@ Every backend must support these operations:
 | Operation | Description |
 |---|---|
 | **Validate** | Given configuration (CLI args), check all prerequisites and parameter validity. Report actionable errors on failure. |
-| **Start sandbox** | Create and start an isolated sandbox. Return an opaque handle for subsequent operations. Each call creates an independent sandbox. (D28) |
+| **Start sandbox** | Create and start an isolated sandbox. Return a sandbox object for subsequent operations. Each call creates an independent sandbox. (D28) |
 | **Stop sandbox** | Stop the sandbox and release all resources. Must be idempotent — safe to call on an already-stopped sandbox. |
-| **Execute** | Run a command in a specific sandbox. Accepts either a `command` string or `args` array, plus `working_directory`, `timeout`, and `output_limit`. Returns `{stdout, stderr, exit_code, exec_duration_ms}`. |
-| **Tool instructions** | Return a description string for the `shell_exec` tool, or null. If null, the server requires `--tool-instruction-override` or it fails to start. (D9, D16) |
+| **Execute** | Run a command in a specific sandbox. Accepts either a `command` string or `args` array, plus optional `stdin`, `working_directory`, `timeout`, and `output_limit`. Returns `{stdout, stderr, exit_code, exec_duration_ms}`. |
+| **Tool instructions** | Return a description string for the `shell_exec` tool, or null. Used to explain the specific capabilities of this sandbox ("a debian linux box" or "a busybox with these limited commands ..."). If null, the server requires `--tool-instruction-override` or it fails to start. (D9, D16) |
+
+**Pythonic usage pattern:** The backend is an object; the sandbox it creates is also an object. Validate is a separate step because it may be async (e.g., checking if Docker is running). Start auto-validates if not already validated, so callers can't forget.
+
+```python
+backend = DockerBackend(config)
+await backend.validate()            # check prerequisites, raise on failure
+instructions = backend.tool_instructions()
+
+sandbox = await backend.start()     # auto-validates if needed; returns a Sandbox object
+result = await sandbox.exec(...)    # exec, stop are methods on the sandbox
+await sandbox.stop()
+```
+
+This is a usage sketch, not a prescribed implementation. The architecture document defines the actual class hierarchy and interfaces.
 
 ### 5.2 Compatibility Contract
 
@@ -296,6 +317,7 @@ Every backend must support these operations:
 
 - Accept `command` (string) and execute it through an appropriate shell. The backend chooses the shell. (D20)
 - Accept `args` (string array) and execute without shell interpretation. (D15)
+- Accept optional `stdin` (string) and pipe it to the command's standard input. If not provided, stdin is not connected (EOF). (D30)
 - Respect `working_directory`, defaulting to the sandbox's native working directory. (D13)
 - Enforce timeout: kill the process at expiration, return no output, set exit_code to 124, set stderr to the timeout notice.
 - Enforce output limit: kill the process when combined stdout+stderr exceeds the limit, return no output, set stderr to the limit-exceeded message.
@@ -304,7 +326,7 @@ Every backend must support these operations:
 
 **May vary across backends:**
 
-- Shell type and capabilities (bash, POSIX sh, restricted shell, etc.) — must be documented in tool instructions.
+- Shell type and capabilities (bash, POSIX sh, restricted shell, etc.) — should be documented in tool instructions.
 - Available commands, tools, and packages.
 - Filesystem layout, permissions, and available disk space.
 - Resource limit options and how they're configured. (D26)
@@ -316,6 +338,7 @@ Every backend must support these operations:
 | Responsibility | Description |
 |---|---|
 | **Shell selection** | Choose the shell for `command` mode. Document it in tool instructions. (D20) |
+| **Stdin piping** | When `stdin` is provided, pipe its content to the process's standard input. When absent, stdin is not connected. (D30) |
 | **Timeout enforcement** | Monitor execution time; kill the process when the timeout expires. |
 | **Output limit enforcement** | Monitor combined stdout+stderr size; kill the process when the limit is exceeded. |
 | **Lifecycle management** | Start and stop sandboxes cleanly and promptly. |
@@ -354,14 +377,15 @@ The `shell_exec` tool's `description` field — the text the LLM sees — is ass
 
 1. **If `--tool-instruction-override` is provided:** Use it as the entire description. Backend instructions and `--extended-tool-instruction` are both ignored.
 2. **Otherwise:** Start with the backend's tool instructions. If `--extended-tool-instruction` is provided, append it after a double newline (`\n\n`).
-3. **If the backend returns null/empty and no override is provided:** Fail to start. Error message: `"Backend does not provide tool instructions. Supply --tool-instruction-override to configure the tool description."`
+3. **If the backend returns null/empty and no override is provided:** Fail to start. Error message: `"Backend does not provide tool instructions describing the sandbox. Supply --tool-instruction-override to describe the capabilities of this sandbox (example 'a Debian Linux bash shell' or 'A minimal BusyBox shell with the following commands: ...')."`
 4. **If both `--tool-instruction-override` and `--extended-tool-instruction` are provided:** Fail to start. Error message: `"Cannot use both --tool-instruction-override and --extended-tool-instruction. Use override to replace the description entirely, or extended to append to the backend default."`
 
 **What the tool description should convey:**
 
 - What environment the agent is working in (OS, shell, available tools).
 - The stateless execution model (no state between calls).
-- Constraints (no stdin, output limits, default timeout).
+- How to use the `stdin` parameter for writing files and piping data without shell escaping (e.g., `cat > file.txt` with content in `stdin`). Exact wording to be finalized during implementation. (D30)
+- Constraints (output limits, default timeout, stdin size limit).
 - The actual configured values for timeout and output limit (so the description reflects the real environment, not hardcoded defaults).
 
 ---
@@ -372,7 +396,9 @@ The Docker backend's `tool_instructions()` returns this text (with configured va
 
 > Execute a shell command in an isolated Debian Linux sandbox. Commands run in bash. Each call is independent — no state (shell variables, working directory, background processes) persists between calls. Use the working_directory parameter or chain commands with && to control execution context.
 >
-> Stdin is not connected; commands run non-interactively. Commands time out after 120 seconds by default (override with the timeout parameter for long-running operations). Output is limited to 2 MB — commands exceeding this limit are terminated with no output returned. Use head, tail, or grep to manage large outputs.
+> To write files or pass data without shell escaping, use the stdin parameter (e.g., command="cat > file.txt" with content in stdin). Commands time out after 120 seconds by default (override with the timeout parameter for long-running operations).
+
+*Note: this is a rough draft. The `stdin` guidance and overall wording should be refined during implementation to ensure LLMs learn the pattern effectively. (D30)*
 
 The **120 seconds** and **2 MB** values in this text reflect the server's actual configured `--timeout` and `--output-limit`, not hardcoded defaults. If the user starts the server with `--timeout 300 --output-limit 10485760`, the description says "300 seconds" and "10 MB."
 
@@ -400,7 +426,7 @@ kilntainers
 
 > Execute a shell command in an isolated Debian Linux sandbox. Commands run in bash. Each call is independent — no state (shell variables, working directory, background processes) persists between calls. Use the working_directory parameter or chain commands with && to control execution context.
 >
-> Stdin is not connected; commands run non-interactively. Commands time out after 120 seconds by default (override with the timeout parameter for long-running operations). Output is limited to 2 MB — commands exceeding this limit are terminated with no output returned. Use head, tail, or grep to manage large outputs.
+> To write files or pass data without shell escaping, use the stdin parameter (e.g., command="cat > file.txt" with content in stdin). Commands time out after 120 seconds by default (override with the timeout parameter for long-running operations). Output is limited to 2 MB — commands exceeding this limit are terminated with no output returned. Use head, tail, or grep to manage large outputs.
 
 ---
 
@@ -439,7 +465,7 @@ kilntainers \
 
 > Execute a shell command in an isolated Linux sandbox. Commands run in bash. Each call is independent — no state (shell variables, working directory, background processes) persists between calls. Use the working_directory parameter or chain commands with && to control execution context.
 >
-> Stdin is not connected; commands run non-interactively. Commands time out after 300 seconds by default (override with the timeout parameter for long-running operations). Output is limited to 2 MB — commands exceeding this limit are terminated with no output returned. Use head, tail, or grep to manage large outputs.
+> To write files or pass data without shell escaping, use the stdin parameter (e.g., command="cat > file.txt" with content in stdin). Commands time out after 300 seconds by default (override with the timeout parameter for long-running operations). Output is limited to 2 MB — commands exceeding this limit are terminated with no output returned. Use head, tail, or grep to manage large outputs.
 >
 > This sandbox includes Python 3.12 with numpy, pandas, matplotlib, scipy, and scikit-learn pre-installed. Network access is enabled — you can pip install additional packages or download datasets with curl/wget.
 
@@ -467,7 +493,7 @@ kilntainers \
 
 > Execute a shell command in a remote cloud VM (Modal). Commands run in bash. Each call is independent — no state persists between calls. Use the working_directory parameter or chain commands with && to control execution context.
 >
-> Stdin is not connected; commands run non-interactively. Commands time out after 600 seconds by default (override with the timeout parameter for long-running operations). Output is limited to 2 MB — commands exceeding this limit are terminated with no output returned. Use head, tail, or grep to manage large outputs.
+> To write files or pass data without shell escaping, use the stdin parameter (e.g., command="cat > file.txt" with content in stdin). Commands time out after 600 seconds by default (override with the timeout parameter for long-running operations). Output is limited to 2 MB — commands exceeding this limit are terminated with no output returned. Use head, tail, or grep to manage large outputs.
 >
 > This is a remote cloud VM with an NVIDIA A10G GPU. CUDA toolkit and PyTorch are available. Network access is enabled.
 
@@ -484,12 +510,12 @@ A minimal WebAssembly sandbox with limited capabilities. Uses `--tool-instructio
 ```bash
 kilntainers \
   --backend wasi-busybox \
-  --tool-instruction-override "Execute a command in a lightweight POSIX sandbox. Only sh (POSIX shell) is available — do not use bash-specific syntax like arrays, [[ ]], or process substitution. Available commands: ls, cat, grep, sed, awk, sort, uniq, wc, head, tail, find, mkdir, rm, cp, mv, echo, printf, test, tr, cut, tee, xargs, dirname, basename. No package manager. No network access. No persistent state between calls. Stdin is not connected. Commands time out after 120 seconds. Output is limited to 2 MB."
+  --tool-instruction-override "Execute a command in a lightweight POSIX sandbox. Only sh (POSIX shell) is available — do not use bash-specific syntax like arrays, [[ ]], or process substitution. Available commands: ls, cat, grep, sed, awk, sort, uniq, wc, head, tail, find, mkdir, rm, cp, mv, echo, printf, test, tr, cut, tee, xargs, dirname, basename. No package manager. No network access. No persistent state between calls. To write files or pass data without shell escaping, use the stdin parameter (e.g., command='cat > file.txt' with content in stdin). Commands time out after 120 seconds. Output is limited to 2 MB."
 ```
 
 **Tool description seen by the LLM:**
 
-> Execute a command in a lightweight POSIX sandbox. Only sh (POSIX shell) is available — do not use bash-specific syntax like arrays, [[ ]], or process substitution. Available commands: ls, cat, grep, sed, awk, sort, uniq, wc, head, tail, find, mkdir, rm, cp, mv, echo, printf, test, tr, cut, tee, xargs, dirname, basename. No package manager. No network access. No persistent state between calls. Stdin is not connected. Commands time out after 120 seconds. Output is limited to 2 MB.
+> Execute a command in a lightweight POSIX sandbox. Only sh (POSIX shell) is available — do not use bash-specific syntax like arrays, [[ ]], or process substitution. Available commands: ls, cat, grep, sed, awk, sort, uniq, wc, head, tail, find, mkdir, rm, cp, mv, echo, printf, test, tr, cut, tee, xargs, dirname, basename. No package manager. No network access. No persistent state between calls. To write files or pass data without shell escaping, use the stdin parameter (e.g., command='cat > file.txt' with content in stdin). Commands time out after 120 seconds. Output is limited to 2 MB.
 
 *Note: This uses `--tool-instruction-override` because the WASI backend's `tool_instructions()` may return null (the backend can't describe itself adequately), or the user wants full control over describing the limited environment. The override replaces everything — the user is responsible for the complete description.*
 
@@ -532,7 +558,7 @@ The following open items from [spec_queue.md](spec_queue.md) were resolved in th
 
 | Item | Resolution | Spec Section |
 |---|---|---|
-| **Stdin policy** | Not supported. Stdin not connected; commands receive EOF. Documented in tool description and execution model. | §2.6 |
+| **Stdin parameter** | Optional `stdin` string parameter, piped to command's standard input. 2 MiB size limit. When absent, stdin is not connected (EOF). (D30) | §2.1, §2.6 |
 | **Error contract** | Normal results (including timeout and output limit) use `isError: false` with no output returned. Infrastructure failures (sandbox death, invalid params) use `isError: true`. Exit code 124 for timeout, 1 for output limit. Messages in stderr. | §2.5 |
 | **Output limit scope** | Combined stdout + stderr, not per-stream. | §2.4 |
 | **Graceful shutdown** | In-flight exec killed immediately on disconnect. Sandbox torn down with 10s force-kill timeout. | §4.4 |

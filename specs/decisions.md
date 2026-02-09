@@ -161,13 +161,15 @@ Items queued:
 
 Providing both is an error. Providing neither is an error.
 
+An optional `stdin` parameter (D30) can be combined with either mode to pipe data to the command's standard input, solving the shell escaping problem for data passing.
+
 **Rationale:**
 - Docker and Modal are natively array-based. For `command` mode, the backend wraps in its shell of choice.
 - The text editor use case requires passing multi-line strings with quotes, newlines, and special characters. With string-only mode, this requires painful multi-layer escaping (JSON -> shell -> argument). Array mode passes arguments cleanly via JSON only.
 - Implementation cost is minimal: the backend knows which shell is available and how to invoke it.
 - E2B is string-based natively (fits `command` mode directly).
 
-**Backend contract:** The backend `exec` method receives either a `command` string or an `args` list. The backend decides how to invoke string commands (which shell, what flags). The backend's tool description should indicate what shell/command syntax is supported (bash, POSIX sh, etc.). This is a key reason we require backend-provided tool descriptions rather than having a global default.
+**Backend contract:** The backend `exec` method receives either a `command` string or an `args` list, plus an optional `stdin` string. The backend decides how to invoke string commands (which shell, what flags). The backend's tool description should indicate what shell/command syntax is supported (bash, POSIX sh, etc.). This is a key reason we require backend-provided tool descriptions rather than having a global default.
 
 ---
 
@@ -219,17 +221,18 @@ Providing both is an error. Providing neither is an error.
 
 ---
 
-## D21: Exec Parameters -- Add Optional Timeout, No Env
+## D21: Exec Parameters -- Add Optional Timeout, Stdin, No Env
 
 **Decision:** The `shell_exec` tool parameters are:
 - `command` (string, mutually exclusive with `args`)
 - `args` (string array, mutually exclusive with `command`)
+- `stdin` (optional string) -- piped to the command's standard input. Usable with either `command` or `args`. (D30)
 - `working_directory` (optional string)
 - `timeout` (optional int, seconds) -- per-call override of the default timeout
 
 No `env` parameter. Environment variables can be set inline in the command (`FOO=bar some_command`) or via the shell.
 
-**Rationale:** Timeout override is useful for known-long tasks (e.g., `apt-get install`, large builds). Env is not worth the interface complexity since inline syntax works fine and is natural for shell commands.
+**Rationale:** Timeout override is useful for known-long tasks (e.g., `apt-get install`, large builds). Stdin enables safe data passing without shell escaping -- critical for writing files and piping data to commands (D30). Env is not worth the interface complexity since inline syntax works fine and is natural for shell commands.
 
 ---
 
@@ -314,3 +317,29 @@ The API must be clean: no global state, no singleton sandbox. Each sandbox is an
 **Decision:** Serial execution of exec calls within a single sandbox is a v1 implementation detail, not an API-level constraint. The API does not mention or enforce serialization. Internally, the implementation queues concurrent exec calls to the same sandbox and runs them serially.
 
 **Rationale:** The API should not prevent future parallelism. If we later allow concurrent exec within a sandbox, nothing in the external interface changes -- it's just a backend behavior change.
+
+---
+
+## D30: Add `stdin` Parameter for Safe Data Passing
+
+**Decision:** Add an optional `stdin` (string) parameter to `shell_exec`, usable with either `command` or `args` mode. The string is piped to the command's standard input, completely bypassing the shell's argument parsing. Subject to a 2 MiB size limit (matching the output limit default). `command` and `args` remain mutually exclusive (D15 unchanged).
+
+**Problem solved:** The existing interface forces a choice between shell features (`command` mode — pipes, redirects) and safe data passing (`args` mode — no escaping needed). There's no way to combine both. An LLM writing a large file with nested quotes, newlines, and JSON into the container faces a multi-layer escaping nightmare (JSON → shell → argument) in `command` mode, and can't redirect to a file in `args` mode (no shell). The LLM doesn't even know which shell is running (D20), so it can't escape correctly.
+
+**How `stdin` solves it:**
+- Write a file: `command: "cat > output.txt"`, `stdin: "big content with 'quotes' and {\"json\": true}"` — only needs `cat` and a shell, POSIX universal. No container-specific tools required.
+- Pipe to a program: `command: "python3 process.py"`, `stdin: "input data..."`
+- Pass to grep: `command: "grep -c 'error'"`, `stdin: "<log content>"`
+
+**Why one data stream is sufficient:** `stdin` carries one blob, which initially seems limiting for multi-parameter operations (str_replace needs old + new). But LLMs naturally decompose these into multiple calls: (1) read the file, (2) transform in LLM context, (3) write back via `stdin`. This is how coding agents already work. We cannot assume containers have Python, sed, or any specific tool — solutions must work with minimal images, which rules out `args`-based multi-parameter patterns.
+
+**Alternatives considered:**
+- *Parameterized shell commands* (`command` + `args` together as `$1`, `$2`): Re-introduces shell quoting — the LLM must understand positional parameter syntax and remember to double-quote `$N` references.
+- *Separate `write_file` tool*: Only solves file writing, not general data passing. Adds a second MCP tool.
+- *Keep current design*: Doesn't solve the problem. `args: ["bash", "-c", ...]` re-introduces shell escaping inside the array and pushes shell knowledge to the LLM (contradicts D20).
+
+**Size limit:** `stdin` content is limited to 2 MiB (same default as the output limit). If exceeded, the call returns an MCP error (`isError: true`) without executing the command.
+
+**Backend contract:** All backends must support piping `stdin` content to the process (Docker: `docker exec -i`, subprocess: `communicate(input=...)`).
+
+**Tool description:** Must be updated to explain `stdin` usage patterns, particularly `cat > file` + `stdin` for file writing. Exact wording to be finalized during implementation.

@@ -13,7 +13,7 @@ Items marked with [x] have been decided (see [decisions.md](decisions.md)) but m
 - [x] **Exec timeout policy**: 120s default, configurable at startup (`--timeout`), per-call override. Communicated via exit code + stderr. (Decision D25)
 - [x] **Output size limits**: 2MB default, configurable at startup (`--output-limit`). Exceeding limit = error (kill process, return error, no partial output). Agent retries with head/tail/grep. (Decision D24)
 - [x] **Binary output handling**: No special handling. UTF-8 mangling is fine, 2MB limit protects. (Decision D27)
-- [x] **Stdin policy**: Not supported. Stdin not connected; commands receive EOF. Documented in tool description and execution model. (Functional spec §2.6)
+- [x] **Stdin policy**: Optional `stdin` parameter pipes content to command's standard input, 2 MiB limit. When absent, stdin not connected (EOF). (Decision D30, Functional spec §2.1, §2.6)
 - [x] **Environment variables**: No `env` param. Use inline `FOO=bar cmd` syntax. (Decision D21)
 - [x] **Working directory default**: Container's WORKDIR, falling back to `/`. (Decision D13)
 - [x] **Exec response schema**: `{stdout, stderr, exit_code, exec_duration_ms}`. No custom fields for timeout/truncation -- these are communicated through output text. (Decision D22)
