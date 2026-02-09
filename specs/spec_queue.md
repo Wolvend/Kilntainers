@@ -86,10 +86,10 @@ This section tracks the creation of detailed architecture documents. Unlike the 
 
 ### Phases
 
-- [ ] **Phase 1: Project structure & packaging** (`project_structure.md`)
+- [x] **Phase 1: Project structure & packaging** (`project_structure.md`)
   Python package layout, directory structure, entry points, dependency management (pyproject.toml / requirements), and naming conventions. Establishes the skeleton everything else lives in.
 
-- [ ] **Phase 2: Backend abstraction layer** (`backend_abstraction.md`)
+- [x] **Phase 2: Backend abstraction layer** (`backend_abstraction.md`)
   The Python ABC definitions for Backend and Sandbox, method signatures, type contracts, async patterns, and how the MCP layer interacts with backends without knowing which one is running. This is the central interface — get it right before implementing either side.
 
 - [ ] **Phase 3: Docker backend implementation** (`docker_backend.md`)
