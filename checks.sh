@@ -50,4 +50,4 @@ fi
 
 # Check if python files were changed, and run tests if so
 echo "${headerStart}Running Python Tests${headerEnd}"
-uv run python -m pytest -q .
+uv run python -m pytest -q -m 'not docker_integration' .

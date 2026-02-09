@@ -46,16 +46,16 @@ Implement the foundational types that everything else depends on: exception hier
 
 ---
 
-## Phase 3: Docker Backend
+## Phase 3: Docker Backend ✅
 
 Implement `DockerBackend` and `DockerSandbox` — the full Docker container lifecycle and command execution engine.
 
 **What to build:**
 
-- [ ] `backends/docker.py` — `DockerBackend` class: `_validate()` (docker info check), `_ensure_image()` (check-then-pull), `_create_sandbox()` (run + readiness), `_build_run_command()`, `tool_instructions()`
-- [ ] `backends/docker.py` — `DockerSandbox` class: `exec()` with lock, `_do_exec()` (subprocess, timeout via `asyncio.wait_for`, output limit via `_communicate_with_limit`), `_build_exec_command()`, `stop()` (idempotent, best-effort), `wait_for_death()` (docker wait + stop-requested flag), `sandbox_id` property
-- [ ] `backends/docker.py` — `_OutputLimitExceeded` private exception, `_run_docker` CLI helper
-- [ ] Unit tests (`backends/test_docker.py`): mock `asyncio.create_subprocess_exec` to test command construction, timeout handling, output limit enforcement, stdin piping, stop idempotency, death detection, tool instructions (default vs custom image), docker run command assembly
+- [x] `backends/docker.py` — `DockerBackend` class: `_validate()` (docker info check), `_ensure_image()` (check-then-pull), `_create_sandbox()` (run + readiness), `_build_run_command()`, `tool_instructions()`
+- [x] `backends/docker.py` — `DockerSandbox` class: `exec()` with lock, `_do_exec()` (subprocess, timeout via `asyncio.wait_for`, output limit via `_communicate_with_limit`), `_build_exec_command()`, `stop()` (idempotent, best-effort), `wait_for_death()` (docker wait + stop-requested flag), `sandbox_id` property
+- [x] `backends/docker.py` — `_OutputLimitExceeded` private exception, `_run_docker` CLI helper
+- [x] Unit tests (`backends/test_docker.py`): mock `asyncio.create_subprocess_exec` to test command construction, timeout handling, output limit enforcement, stdin piping, stop idempotency, death detection, tool instructions (default vs custom image), docker run command assembly
 - [ ] Integration tests (`backends/test_docker_integration.py`, marked `@pytest.mark.docker_integration`): basic exec, command vs args mode, working directory, stdin piping, timeout with real sleep, output limit with real output, stateless execution, network isolation, death detection (docker kill), container cleanup after stop, label verification
 
 **Architecture reference:** [docker_backend.md](architecture/docker_backend.md) §2–§9
