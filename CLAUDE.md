@@ -16,19 +16,6 @@ This repository has detailed specs, and follows spec-driven design. Key files in
 
 ## Commands & Tools
 
-You have access ot a MCP server to running tools like lint, format, types, test. Generally prefer using the MCP commands to bash as these are pre-vetted and approved.
+You have access ot a MCP server to running tools like lint, format, types, test. 
 
-We use:
- - ruff for formatting: `uvx ruff format` to fix issues
- - ruff checking: `uvx ruff check --fix` to fix issues
- - ty for typechecking: `uvx ty check` to run
-
-This script will run all checks (lint, format, types, tests):
-```bash
-uv run ./checks.sh
-```
-
-Run tests only:
-```bash
-uv run pytest .
-```
+Always use the MCP commands to perform these actions, not direct bash calls. Bash calls require approval and will stop our work.

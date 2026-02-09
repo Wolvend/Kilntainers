@@ -56,23 +56,23 @@ Implement `DockerBackend` and `DockerSandbox` — the full Docker container life
 - [x] `backends/docker.py` — `DockerSandbox` class: `exec()` with lock, `_do_exec()` (subprocess, timeout via `asyncio.wait_for`, output limit via `_communicate_with_limit`), `_build_exec_command()`, `stop()` (idempotent, best-effort), `wait_for_death()` (docker wait + stop-requested flag), `sandbox_id` property
 - [x] `backends/docker.py` — `_OutputLimitExceeded` private exception, `_run_docker` CLI helper
 - [x] Unit tests (`backends/test_docker.py`): mock `asyncio.create_subprocess_exec` to test command construction, timeout handling, output limit enforcement, stdin piping, stop idempotency, death detection, tool instructions (default vs custom image), docker run command assembly
-- [ ] Integration tests (`backends/test_docker_integration.py`, marked `@pytest.mark.docker_integration`): basic exec, command vs args mode, working directory, stdin piping, timeout with real sleep, output limit with real output, stateless execution, network isolation, death detection (docker kill), container cleanup after stop, label verification
+- [x] Integration tests (`backends/test_docker_integration.py`, marked `@pytest.mark.docker_integration`): basic exec, command vs args mode, working directory, stdin piping, timeout with real sleep, output limit with real output, stateless execution, network isolation, death detection (docker kill), container cleanup after stop, label verification
 
 **Architecture reference:** [docker_backend.md](architecture/docker_backend.md) §2–§9
 
 ---
 
-## Phase 4: MCP Server & Tool Layer
+## Phase 4: MCP Server & Tool Layer ✅
 
 Implement the MCP server using the official `mcp` SDK with FastMCP. Register the `shell_exec` tool, handle requests, and format responses. stdio transport only.
 
 **What to build:**
 
-- [ ] Add `mcp` SDK dependency to `pyproject.toml` (`mcp>=1.0,<2.0`)
-- [ ] `server.py` — `SessionContext` dataclass, `create_lifespan()` factory (stdio death propagation via SIGTERM self-signal), `create_server()` factory function, `assemble_tool_description()`
-- [ ] `server.py` — `shell_exec_handler()` with input validation (`_validate_inputs`), ExecRequest construction (default resolution), sandbox.exec() call, ExecResult → JSON response formatting, SandboxDiedError catch, unexpected exception catch-all
-- [ ] `server.py` — `_create_handler()` to bind server config via closure
-- [ ] Unit tests (`test_server.py`, using MockBackend/MockSandbox): tool description assembly (all rules from functional spec §6), input validation (all error cases), handler normal responses, handler error responses (SandboxDiedError, unexpected exceptions), ExecRequest construction (default resolution, all parameter combos), server factory returns configured FastMCP instance
+- [x] Add `mcp` SDK dependency to `pyproject.toml` (`mcp>=1.0,<2.0`)
+- [x] `server.py` — `SessionContext` dataclass, `create_lifespan()` factory (stdio death propagation via SIGTERM self-signal), `create_server()` factory function, `assemble_tool_description()`
+- [x] `server.py` — `shell_exec_handler()` with input validation (`_validate_inputs`), ExecRequest construction (default resolution), sandbox.exec() call, ExecResult → JSON response formatting, SandboxDiedError catch, unexpected exception catch-all
+- [x] `server.py` — `_create_handler()` to bind server config via closure
+- [x] Unit tests (`test_server.py`, using MockBackend/MockSandbox): tool description assembly (all rules from functional spec §6), input validation (all error cases), handler normal responses, handler error responses (SandboxDiedError, unexpected exceptions), ExecRequest construction (default resolution, all parameter combos), server factory returns configured FastMCP instance
 
 **Architecture references:**
 - [mcp_server.md](architecture/mcp_server.md) §1–§9
