@@ -80,7 +80,7 @@ I'm leaning towards keeping the API exposed to agents over MCP extremely simple:
 start/shutdown: not exposed directly to agents via MCP. When you establish a connection it starts up sandbox, when you shutdown the connection it shuts down the sandbox.
 
  - stdio based MCP servers: 1 container for lifetime of server (as that's the connection)
- - https streaming: 1 container per connection for lifetime of connection.
+ - Streamable HTTP: 1 container per session for lifetime of session.
 
 ## Tech Stack
 

@@ -14,7 +14,7 @@ Kilntainers is an MCP server that gives LLM agents isolated Linux sandboxes for 
 
 **V1 scope:** Docker is the only backend. The backend interface is designed for pluggability so additional backends (Modal, E2B, WASI, etc.) can be added without changing the MCP layer. (D2)
 
-**Transport terminology:** D8 references "HTTP/SSE." The MCP protocol now calls this transport "Streamable HTTP." This spec uses current terminology; the behavioral semantics (one sandbox per connection) are unchanged.
+**Transport:** Kilntainers supports stdio and Streamable HTTP transports. The legacy SSE transport is not supported — SSE and Streamable HTTP are different MCP transports, and SSE is deprecated. (D8)
 
 ---
 
@@ -82,7 +82,7 @@ The response is a JSON object returned as a text content block:
 | Field | Type | Description |
 |---|---|---|
 | `stdout` | string | Standard output from the command. Empty string if none. |
-| `stderr` | string | Standard error. May include appended infrastructure messages (e.g., timeout notice). |
+| `stderr` | string | Standard error. May contain infrastructure messages (timeout, output limit). |
 | `exit_code` | integer | Process exit code, or a synthetic code for infrastructure events (124 for timeout). |
 | `exec_duration_ms` | integer | Wall-clock execution time in milliseconds. |
 
@@ -95,10 +95,13 @@ Default: **120 seconds**. Configurable at startup (`--timeout`). Overridable per
 When a command exceeds its timeout:
 
 1. The process is killed.
-2. Any stdout/stderr produced before the kill **is included** in the response.
-3. A notice is **appended** to stderr: `[kilntainers: command timed out after {N}s]`
-4. `exit_code` is set to **124** (matches the GNU `timeout` convention).
-5. `exec_duration_ms` reflects the actual wall-clock time.
+2. **No output is returned.** Both `stdout` and `stderr` are set to the error message only — partial output is discarded.
+3. `stderr` is set to: `[kilntainers: command timed out after {N}s]`
+4. `stdout` is set to empty string.
+5. `exit_code` is set to **124** (matches the GNU `timeout` convention).
+6. `exec_duration_ms` reflects the actual wall-clock time.
+
+**Why no partial output:** Truncated output could break the LLM in unknown ways — it's data that is silently incomplete. Returning a clean error is predictable and forces the agent to adjust its approach (shorter command, incremental output, etc.).
 
 ### 2.4 Output Limit Behavior
 
@@ -114,7 +117,7 @@ When combined output exceeds the limit:
 
 **Why no partial output:** Returning truncated output means the agent is working with data that is silently incomplete. Returning an error forces the agent to re-run with explicit output management (`head -n 100`, `tail -n 50`, `grep pattern`, `wc -l`), which produces better results. (D24)
 
-**Interaction with timeout:** If both conditions would trigger, whichever fires first takes effect. If the output limit is exceeded before the timeout, output-limit behavior applies (no output). If the timeout fires first, timeout behavior applies (partial output included).
+**Interaction with timeout:** If both conditions would trigger, whichever fires first takes effect. Both produce the same behavior (kill process, no output, error message in stderr), but with different stderr messages and exit codes (124 for timeout, 1 for output limit).
 
 ### 2.5 Error Categories
 
@@ -122,7 +125,7 @@ When combined output exceeds the limit:
 |---|---|---|
 | Command succeeds (exit 0) | `false` | Normal response |
 | Command fails (non-zero exit) | `false` | Normal response with the command's exit code |
-| Timeout | `false` | exit_code 124, partial output included, stderr notice appended |
+| Timeout | `false` | exit_code 124, no output, stderr notice only |
 | Output limit exceeded | `false` | exit_code 1, no output, stderr notice only |
 | Invalid parameters | `true` | MCP error message describing the validation failure |
 | Sandbox dead | `true` | MCP error message; connection drops after response (D23) |
@@ -155,7 +158,7 @@ Kilntainers is configured through CLI parameters at startup. One server instance
 | `--output-limit` | integer (bytes) | `2097152` | Max combined stdout+stderr per exec. (D24) |
 | `--extended-tool-instruction` | string | — | Appended to backend's tool description. (D16) |
 | `--tool-instruction-override` | string | — | Replaces the entire tool description. (D16) |
-| `--session-timeout` | integer (sec) | `1800` | Idle session timeout (HTTP mode only). |
+| `--session-timeout` | integer (sec) | `300` | Idle session timeout (HTTP mode only). |
 
 **Constraints:**
 
@@ -222,7 +225,7 @@ Per session:
 Sessions are identified by the `Mcp-Session-Id` header per the MCP Streamable HTTP protocol. A session ends when:
 
 - The client explicitly closes it.
-- No requests are received for `--session-timeout` seconds (default: 30 minutes).
+- No requests are received for `--session-timeout` seconds (default: 5 minutes).
 - The sandbox dies (D23).
 
 Multiple sessions can be active simultaneously. Each has an independent sandbox — no shared state between sessions.
@@ -291,7 +294,7 @@ Every backend must support these operations:
 - Accept `command` (string) and execute it through an appropriate shell. The backend chooses the shell. (D20)
 - Accept `args` (string array) and execute without shell interpretation. (D15)
 - Respect `working_directory`, defaulting to the sandbox's native working directory. (D13)
-- Enforce timeout: kill the process at expiration, set exit_code to 124, append the timeout notice to stderr. Return any output produced before the kill.
+- Enforce timeout: kill the process at expiration, return no output, set exit_code to 124, set stderr to the timeout notice.
 - Enforce output limit: kill the process when combined stdout+stderr exceeds the limit, return no output, set stderr to the limit-exceeded message.
 - Each exec call is independent — no persistent shell session, no state carried between calls.
 - `stop` cleans up all sandbox resources completely.
@@ -322,16 +325,15 @@ The MCP layer passes configured values (timeout, output_limit, network flag) to 
 
 If the MCP server crashes (SIGKILL, power loss, panic), sandboxes may be left running without a controlling process.
 
-**User-facing cleanup command:** `kilntainers cleanup` — a CLI subcommand that discovers and removes orphaned sandboxes. Supports `--dry-run` to preview what would be removed.
+**V1 strategy (Docker):**
 
-**Docker backend strategy:**
-
-- Containers are created with the `--rm` flag (auto-removed when stopped normally).
-- Containers are labeled (`kilntainers=true`) for identification by the cleanup command.
-- `kilntainers cleanup` finds running containers with this label and removes them.
+- Containers are created with the `--rm` flag, so they are auto-removed when stopped.
 - On normal shutdown, the server stops its containers (which triggers `--rm` auto-removal).
+- Containers are labeled (`kilntainers=true`) for manual identification if needed (e.g., `docker ps --filter label=kilntainers=true`).
 
-Other backends will implement cleanup strategies appropriate to their infrastructure (e.g., Modal sandboxes may have built-in TTLs).
+If the server crashes without stopping the container, `--rm` won't trigger (the container was never stopped). In v1, operators can manually find and remove orphaned containers using the label. Users can also use `docker stop` and `docker rm` directly.
+
+**FUTURE:** A `kilntainers cleanup` CLI subcommand that discovers and removes orphaned sandboxes automatically. Not in v1 scope — `--rm` combined with manual cleanup via labels is sufficient.
 
 ### 5.5 Future: Mapped Working Directory Hooks
 
@@ -512,22 +514,22 @@ The following open items from [spec_queue.md](spec_queue.md) were resolved in th
 | Item | Resolution | Spec Section |
 |---|---|---|
 | **Stdin policy** | Not supported. Stdin not connected; commands receive EOF. Documented in tool description and execution model. | §2.6 |
-| **Error contract** | Normal results (including timeout and output limit) use `isError: false`. Infrastructure failures (sandbox death, invalid params) use `isError: true`. Exit code 124 for timeout, 1 for output limit. Messages in stderr. | §2.5 |
+| **Error contract** | Normal results (including timeout and output limit) use `isError: false` with no output returned. Infrastructure failures (sandbox death, invalid params) use `isError: true`. Exit code 124 for timeout, 1 for output limit. Messages in stderr. | §2.5 |
 | **Output limit scope** | Combined stdout + stderr, not per-stream. | §2.4 |
 | **Graceful shutdown** | In-flight exec killed immediately on disconnect. Sandbox torn down with 10s force-kill timeout. | §4.4 |
 | **Backend abstraction design** | Five required operations: validate, start, stop, exec, tool_instructions. Behavioral contract, not method signatures. | §5.1 |
 | **Backend responsibilities** | Timeout enforcement, output limit enforcement, shell selection, lifecycle management, death detection, resource isolation. | §5.3 |
 | **Backend abstraction boundaries** | Compatibility contract defines what must be consistent (command/args, working dir, timeout, output limit, stateless exec, cleanup) and what may vary (shell, commands, resources, performance). | §5.2 |
-| **Orphaned sandbox cleanup** | `kilntainers cleanup` subcommand. Docker: `--rm` flag + labels + cleanup command. | §5.4 |
+| **Orphaned sandbox cleanup** | V1: Docker `--rm` flag + `kilntainers=true` label for manual identification. `kilntainers cleanup` subcommand deferred to FUTURE. | §5.4 |
 | **Container naming/identification** | Docker containers labeled `kilntainers=true` for discovery. | §5.4 |
 | **Resource defaults (Docker)** | No explicit limits by default (Docker defaults). Operators set limits for production. | §3.2 |
 | **Container startup flow** | Pull → create/start → verify readiness → accept calls. Pull failure = startup error. | §4.3 |
 | **Docker config approach** | Flat CLI args for v1 with `--docker-run-flag` escape hatch for uncovered options. | §3.2 |
 | **Tool description text** | Drafted for Docker backend with dynamic timeout and output limit values. | §7 |
 | **Startup parameters** | Full schema in §3 including transport, host, port, session-timeout. | §3.1, §3.2 |
-| **Connection lifecycle** | stdio: one sandbox per process. HTTP: one sandbox per session, identified by Mcp-Session-Id. 30-minute idle timeout. | §4 |
+| **Connection lifecycle** | stdio: one sandbox per process. Streamable HTTP: one sandbox per session, identified by Mcp-Session-Id. 5-minute idle timeout (configurable). | §4 |
 | **Security model** | Threat model covering exfiltration, resource abuse, container escape, host access, and HTTP exposure. | §9 |
-| **D8 transport terminology** | Updated to "Streamable HTTP" per current MCP protocol. | §1 |
+| **D8 transport correction** | Streamable HTTP, not SSE. These are different transports; SSE is deprecated. D8 updated. | §1 |
 
 **Deferred:**
 

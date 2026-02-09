@@ -28,7 +28,7 @@ Items marked with [x] have been decided (see [decisions.md](decisions.md)) but m
 
 - [x] **Backend abstraction design**: ABC (Decision D19). Five required operations: validate, start, stop, exec, tool_instructions. Behavioral contract defined. (Functional spec §5.1)
 - [x] **Backend responsibilities**: Timeout enforcement, output limit enforcement, shell selection, lifecycle management, death detection, resource isolation. (Functional spec §5.3)
-- [x] **Orphaned sandbox cleanup**: `kilntainers cleanup` subcommand. Docker: `--rm` flag + `kilntainers=true` labels + cleanup command. (Functional spec §5.4)
+- [x] **Orphaned sandbox cleanup**: V1: Docker `--rm` flag + `kilntainers=true` label for manual identification. `kilntainers cleanup` subcommand deferred to FUTURE. (Functional spec §5.4)
 - [x] **Backend parameter passing**: Flat CLI args, no namespacing. (Decision D12)
 - [x] **Backend abstraction boundaries**: Compatibility contract defines what must be consistent and what may vary. (Functional spec §5.2)
 - [x] **Backend-provided tool instructions**: Override replaces everything; extended appends to backend with double newline; both provided = error; backend null + no override = fail to start. (Decision D16)
@@ -45,11 +45,11 @@ Items marked with [x] have been decided (see [decisions.md](decisions.md)) but m
 
 ## MCP Interface
 
-- [x] **Transport**: Both stdio and Streamable HTTP (updated terminology from D8's "HTTP/SSE"). (Decision D8, Functional spec §1)
+- [x] **Transport**: stdio and Streamable HTTP. No SSE (deprecated, different transport). (Decision D8 corrected, Functional spec §1)
 - [x] **Tool name**: `shell_exec`. No global default description -- backend provides or user overrides. (Decision D9)
 - [x] **Tool description text**: Drafted for Docker backend with dynamic timeout/output-limit values. (Functional spec §7)
 - [x] **MCP server startup parameters**: Full CLI parameter schema including core params and Docker backend params. (Functional spec §3.1, §3.2)
-- [x] **Connection lifecycle details**: stdio: one sandbox per process. HTTP: one sandbox per session (Mcp-Session-Id), 30min idle timeout. Startup: pull → start → verify → accept. Shutdown: kill in-flight, stop sandbox, 10s force-kill. Death: drop connection. (Functional spec §4)
+- [x] **Connection lifecycle details**: stdio: one sandbox per process. Streamable HTTP: one sandbox per session (Mcp-Session-Id), 5min idle timeout (configurable). Startup: pull → start → verify → accept. Shutdown: kill in-flight, stop sandbox, 10s force-kill. Death: drop connection. (Functional spec §4)
 
 ## Security
 
@@ -64,7 +64,7 @@ Items marked with [x] have been decided (see [decisions.md](decisions.md)) but m
 
 - [x] **Mapped working directory hooks**: Design optional `mounts`/`volumes` parameter in backend interface spec. Document but don't implement in v1. (Decision D14)
 - [x] **Parallel exec interface**: API says nothing about serialization. Internal v1 implementation queues and serializes. No API change needed for future parallelism. (Decision D29)
-- [x] **Multi-sandbox support**: Required in v1 (HTTP/SSE has concurrent connections). No global sandbox state. Each sandbox is an independent object with explicit handle. (Decision D28)
+- [x] **Multi-sandbox support**: Required in v1 (Streamable HTTP has concurrent sessions). No global sandbox state. Each sandbox is an independent object with explicit handle. (Decision D28)
 
 ---
 

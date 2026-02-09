@@ -79,13 +79,13 @@ Items queued:
 
 ---
 
-## D8: MCP Transport -- Both stdio and HTTP/SSE
+## D8: MCP Transport -- stdio and Streamable HTTP (No SSE)
 
-**Decision:** Support both stdio and HTTP/SSE streaming transports from v1.
+**Decision:** Support both stdio and Streamable HTTP transports from v1. The legacy SSE transport is **not supported** — SSE and Streamable HTTP are different transports, and SSE is deprecated in the MCP protocol.
 
-**Rationale:** We're using a Python MCP library, so supporting both transports is minimal incremental work. stdio is what most desktop MCP clients use today. HTTP/SSE is needed for remote/server deployments. Both are standard MCP transports.
+**Rationale:** We're using a Python MCP library, so supporting both transports is minimal incremental work. stdio is what most desktop MCP clients use today. Streamable HTTP is needed for remote/server deployments. Both are current standard MCP transports.
 
-**Lifecycle implication:** stdio = one sandbox for the lifetime of the process. HTTP/SSE = one sandbox per connection.
+**Lifecycle implication:** stdio = one sandbox for the lifetime of the process. Streamable HTTP = one sandbox per session.
 
 ---
 
@@ -177,7 +177,7 @@ Providing both is an error. Providing neither is an error.
 
 **Decision:** Use the official `mcp` Python package (from Anthropic/modelcontextprotocol).
 
-**Rationale:** It's the canonical implementation, well-maintained, supports both stdio and HTTP/SSE transports, and includes the FastMCP convenience layer.
+**Rationale:** It's the canonical implementation, well-maintained, supports both stdio and Streamable HTTP transports, and includes the FastMCP convenience layer.
 
 ---
 
@@ -249,7 +249,7 @@ No custom fields for `timed_out` or `output_limit_exceeded`. These conditions ar
 **Rationale:** Sandbox death is unrecoverable (D6). Dropping the connection signals this cleanly to the client. Most MCP clients will offer to restart the server, which gives the user a fresh sandbox. Returning errors within the connection (option 2) would leave the agent in a broken state where every subsequent call fails -- worse UX than a clean break.
 
 **For stdio:** Connection drop = process exit. Client restarts the server process.
-**For HTTP/SSE:** Connection drop = SSE stream closes. Client can reconnect and get a new sandbox.
+**For Streamable HTTP:** Connection drop = session terminated. Client can reconnect and get a new sandbox.
 
 ---
 
@@ -289,11 +289,11 @@ Configurable at startup via `--output-limit` flag.
 
 ## D28: Multi-Sandbox Support -- Required in V1
 
-**Decision:** The backend API and MCP server must support multiple concurrent sandboxes in v1. This is required because HTTP/SSE streaming mode creates one sandbox per connection, and multiple clients can connect simultaneously.
+**Decision:** The backend API and MCP server must support multiple concurrent sandboxes in v1. This is required because Streamable HTTP mode creates one sandbox per session, and multiple clients can connect simultaneously.
 
 The API must be clean: no global state, no singleton sandbox. Each sandbox is an independent object. Calling exec on a specific sandbox must be explicit and clear.
 
-**Rationale:** This isn't a future-proofing concern -- it's a v1 requirement. An HTTP/SSE MCP server will have concurrent connections, each needing its own sandbox. The design must handle this from day one.
+**Rationale:** This isn't a future-proofing concern -- it's a v1 requirement. A Streamable HTTP MCP server will have concurrent sessions, each needing its own sandbox. The design must handle this from day one.
 
 **Implication:** Backend `start()` returns a sandbox handle/object. `exec()`, `stop()` operate on that handle. No global "the sandbox" concept.
 
