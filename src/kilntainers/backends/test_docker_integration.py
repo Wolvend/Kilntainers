@@ -1,14 +1,15 @@
 """Integration tests for Docker backend.
 
-These tests require a running Docker daemon and are marked with
-@pytest.mark.docker_integration. They execute real Docker containers
-and verify the full integration.
+These tests require a running Docker or Podman daemon and are marked with
+@pytest.mark.docker_integration. They execute real containers and verify
+the full integration. They are parameterized by engine ("docker", "podman").
 
 Run with: pytest -m docker_integration
 Skip with: pytest -m "not docker_integration"
 """
 
 import asyncio
+import subprocess
 
 import pytest
 
@@ -18,10 +19,16 @@ from kilntainers.config import DockerBackendConfig
 from kilntainers.errors import SandboxDiedError
 
 
+@pytest.fixture(params=["docker", "podman"])
+def engine(request):
+    """Parameterize tests over container engine (docker, podman)."""
+    return request.param
+
+
 @pytest.fixture
-async def docker_backend():
-    """Create a real Docker backend instance."""
-    config = DockerBackendConfig()
+async def docker_backend(engine):
+    """Create a real Docker/Podman backend instance for the given engine."""
+    config = DockerBackendConfig(engine=engine)
     backend = DockerBackend(config)
     await backend.validate()
     return backend
@@ -374,7 +381,7 @@ class TestDeathDetection:
 
     @pytest.mark.docker_integration
     @pytest.mark.asyncio
-    async def test_wait_for_death_on_kill(self, sandbox):
+    async def test_wait_for_death_on_kill(self, sandbox, engine):
         """wait_for_death returns when container is killed externally."""
         # Start the death detection task
         death_task = asyncio.create_task(sandbox.wait_for_death())
@@ -383,10 +390,8 @@ class TestDeathDetection:
         await asyncio.sleep(0.1)
 
         # Kill the container externally
-        import subprocess
-
         subprocess.run(
-            ["docker", "kill", sandbox._container_id],
+            [engine, "kill", sandbox._container_id],
             capture_output=True,
         )
 
@@ -395,13 +400,11 @@ class TestDeathDetection:
 
     @pytest.mark.docker_integration
     @pytest.mark.asyncio
-    async def test_exec_after_container_dies(self, sandbox):
+    async def test_exec_after_container_dies(self, sandbox, engine):
         """Exec raises SandboxDiedError when container dies during exec."""
         # Kill the container externally
-        import subprocess
-
         subprocess.run(
-            ["docker", "kill", sandbox._container_id],
+            [engine, "kill", sandbox._container_id],
             capture_output=True,
         )
         await asyncio.sleep(0.1)  # Give it time to die
@@ -422,15 +425,13 @@ class TestCleanup:
 
     @pytest.mark.docker_integration
     @pytest.mark.asyncio
-    async def test_container_removed_on_stop(self, sandbox):
+    async def test_container_removed_on_stop(self, sandbox, engine):
         """Container is removed (--rm flag) when stopped."""
         container_id = sandbox._container_id
 
         # Verify container exists
-        import subprocess
-
         result = subprocess.run(
-            ["docker", "inspect", "--format", "{{.State.Running}}", container_id],
+            [engine, "inspect", "--format", "{{.State.Running}}", container_id],
             capture_output=True,
             text=True,
         )
@@ -441,20 +442,18 @@ class TestCleanup:
 
         # Container should be removed (not just stopped)
         result = subprocess.run(
-            ["docker", "inspect", container_id],
+            [engine, "inspect", container_id],
             capture_output=True,
         )
         assert result.returncode != 0  # Container not found
 
     @pytest.mark.docker_integration
     @pytest.mark.asyncio
-    async def test_kilntainers_label_present(self, sandbox):
+    async def test_kilntainers_label_present(self, sandbox, engine):
         """Container has kilntainers=true label."""
-        import subprocess
-
         result = subprocess.run(
             [
-                "docker",
+                engine,
                 "inspect",
                 "--format",
                 '{{index .Config.Labels "kilntainers"}}',
@@ -485,9 +484,9 @@ class TestToolInstructions:
 
     @pytest.mark.docker_integration
     @pytest.mark.asyncio
-    async def test_tool_instructions_custom_image(self):
+    async def test_tool_instructions_custom_image(self, engine):
         """Custom image returns None for tool instructions."""
-        config = DockerBackendConfig(image="alpine:latest")
+        config = DockerBackendConfig(engine=engine, image="alpine:latest")
         backend = DockerBackend(config)
         await backend.validate()
         instructions = backend.tool_instructions()
