@@ -109,6 +109,16 @@ Items queued:
 
 ---
 
+## D10a: Container Engine -- Swappable CLI Name via `--engine`
+
+**Decision:** The Docker backend accepts an `--engine` parameter (default: `docker`) that controls which container CLI binary is invoked. This enables drop-in support for Docker-compatible engines like Podman (`--engine podman`) without a separate backend.
+
+**Rationale:** Podman is explicitly designed as a CLI-compatible replacement for Docker — commands, flags, and output formats are intentionally identical. A swappable CLI name is the lowest-effort approach and avoids adding a new backend, an SDK dependency, or an abstraction layer. This stays consistent with D10's rationale (subprocess CLI calls are debuggable and reproducible). Using `docker-py` was considered and rejected: it would contradict D10, introduce SDK version drift, and Podman's Docker-compatible API socket requires extra setup (`podman system service`) that users don't expect.
+
+**Scope:** This is a Docker backend parameter, not a core parameter. It changes the binary name in subprocess calls — nothing else. If a rare flag differs between engines, a targeted `if` branch is acceptable, but the expectation is near-zero divergence for the container lifecycle commands used (run, exec, cp, stop, rm).
+
+---
+
 ## D11: Default Base Image -- Debian Slim
 
 **Decision:** The Docker backend defaults to `debian:slim` (specifically `debian:bookworm-slim` or current stable) when no image is specified.

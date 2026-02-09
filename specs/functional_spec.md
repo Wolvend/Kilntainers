@@ -172,6 +172,7 @@ Kilntainers is configured through CLI parameters at startup. One server instance
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
+| `--engine` | string | `docker` | Container CLI binary to invoke. Supports any Docker-compatible CLI (e.g., `podman`). (D10a) |
 | `--image` | string | `debian:bookworm-slim` | Docker image to use. Pulled inline if not present locally. (D11, D18) |
 | `--shell` | string | `/bin/bash` | Shell binary used for `command` mode (e.g., `/bin/sh` for images without bash). |
 | `--cpu` | string | *(no limit)* | Docker CPU limit (e.g., `"1.5"`). |
@@ -191,7 +192,7 @@ On startup, before creating any sandbox or accepting connections:
 1. **Parse and validate CLI arguments.** Reject unknown args, invalid types, and conflicting params (e.g., both override and extended instruction).
 2. **Assemble tool description** (see Section 6). Fail if the result is empty.
 3. **Backend validation.** The backend checks its prerequisites. For Docker:
-   - Verify the Docker daemon is reachable (`docker info`).
+   - Verify the container engine is reachable (`{engine} info`, where `{engine}` is the configured `--engine` value).
    - Verify the configured shell exists in the image if feasible.
    - Report clear, actionable errors (e.g., `"Docker daemon is not running"` not `"connection refused"`).
 
@@ -403,7 +404,23 @@ kilntainers
 
 ---
 
-### 8.2 Docker — Python Data Science Image with Network
+### 8.2 Docker Backend with Podman Engine
+
+Same as zero config, but using Podman instead of Docker. The only change is `--engine podman`.
+
+**CLI:**
+
+```bash
+kilntainers --engine podman
+```
+
+**Effective configuration:** Docker backend with Podman engine, `debian:bookworm-slim` image, bash shell, network disabled, 120s timeout, 2 MiB output limit, stdio transport. All subprocess calls invoke `podman` instead of `docker`.
+
+**Tool description seen by the LLM:** Identical to §8.1 — the container engine is an implementation detail invisible to the agent.
+
+---
+
+### 8.3 Docker — Python Data Science Image with Network
 
 A custom image with pre-installed packages, network access for downloading data, and a longer timeout for heavy computation.
 
@@ -430,7 +447,7 @@ kilntainers \
 
 ---
 
-### 8.3 Modal Remote VM (Hypothetical Future Backend)
+### 8.4 Modal Remote VM (Hypothetical Future Backend)
 
 A cloud VM backend for heavy computation with GPU access. Shows how backend-specific params (like `--gpu`) coexist with core params.
 
@@ -458,7 +475,7 @@ kilntainers \
 
 ---
 
-### 8.4 WASI BusyBox Sandbox (Hypothetical Future Backend)
+### 8.5 WASI BusyBox Sandbox (Hypothetical Future Backend)
 
 A minimal WebAssembly sandbox with limited capabilities. Uses `--tool-instruction-override` because the environment is so different from a full Linux system that the entire description must be custom-written.
 
