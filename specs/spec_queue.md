@@ -98,7 +98,7 @@ This section tracks the creation of detailed architecture documents. Unlike the 
 - [x] **Phase 4: MCP server & tool layer** (`mcp_server.md`)
   How the MCP server is structured. Tool registration, request validation, response formatting, tool description assembly, and how the server delegates to the backend. Covers both stdio and Streamable HTTP wiring. Note: the MCP Python ecosystem has two libraries — `mcp` (official low-level SDK) and `FastMCP` (higher-level, separate project). This phase should evaluate and decide which to use.
 
-- [ ] **Phase 5: CLI, configuration & startup** (`cli_and_startup.md`)
+- [x] **Phase 5: CLI, configuration & startup** (`cli_and_startup.md`)
   Argument parsing (library choice, arg definitions), startup validation sequence, how backend-specific args are routed, configuration objects, and the full startup flow from process launch to "ready to accept connections."
 
 - [ ] **Phase 6: Connection & session lifecycle** (`connection_lifecycle.md`)
