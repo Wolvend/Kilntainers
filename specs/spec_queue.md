@@ -92,7 +92,7 @@ This section tracks the creation of detailed architecture documents. Unlike the 
 - [x] **Phase 2: Backend abstraction layer** (`backend_abstraction.md`)
   The Python ABC definitions for Backend and Sandbox, method signatures, type contracts, async patterns, and how the MCP layer interacts with backends without knowing which one is running. This is the central interface — get it right before implementing either side.
 
-- [ ] **Phase 3: Docker backend implementation** (`docker_backend.md`)
+- [x] **Phase 3: Docker backend implementation** (`docker_backend.md`)
   How the Docker backend implements the abstraction: subprocess calls to the Docker CLI, container create/start/exec/stop flows, `--rm` and labeling, image pull mechanics, readiness checks, timeout and output-limit enforcement at the process level, death detection, and resource limit passthrough.
 
 - [ ] **Phase 4: MCP server & tool layer** (`mcp_server.md`)
