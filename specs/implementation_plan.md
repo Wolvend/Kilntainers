@@ -27,17 +27,17 @@ Set up the `src/kilntainers/` package layout, entry points, and build configurat
 
 ---
 
-## Phase 2: Core Types & Backend Abstraction
+## Phase 2: Core Types & Backend Abstraction ✅
 
 Implement the foundational types that everything else depends on: exception hierarchy, shared data types, the Backend and Sandbox ABCs, configuration dataclasses, and the backend registry.
 
 **What to build:**
 
-- [ ] `errors.py` — `KilntainersError`, `BackendError`, `SandboxDiedError`
-- [ ] `backends/base.py` — `ExecResult`, `ExecRequest` (with `__post_init__` validation), `Mount` (designed, not implemented), `Sandbox` ABC, `Backend` ABC (with template method pattern for validate/create_sandbox)
-- [ ] `config.py` — `ServerConfig` and `DockerBackendConfig` frozen dataclasses
-- [ ] `backends/__init__.py` — `BACKEND_REGISTRY` dict and `get_backend_class()` (pointing to Docker backend which is stubbed for now)
-- [ ] Unit tests (co-located `test_*.py` files beside the modules they test): ExecRequest validation, ExecResult construction, Backend ABC behavior (using a stub subclass), Sandbox context manager, Mount type, exception hierarchy, config defaults/immutability
+- [x] `errors.py` — `KilntainersError`, `BackendError`, `SandboxDiedError`
+- [x] `backends/base.py` — `ExecResult`, `ExecRequest` (with `__post_init__` validation), `Mount` (designed, not implemented), `Sandbox` ABC, `Backend` ABC (with template method pattern for validate/create_sandbox)
+- [x] `config.py` — `ServerConfig` and `DockerBackendConfig` frozen dataclasses
+- [x] `backends/__init__.py` — `BACKEND_REGISTRY` dict and `get_backend_class()` (pointing to Docker backend which is stubbed for now)
+- [x] Unit tests (co-located `test_*.py` files beside the modules they test): ExecRequest validation, ExecResult construction, Backend ABC behavior (using a stub subclass), Sandbox context manager, Mount type, exception hierarchy, config defaults/immutability
 
 **Architecture references:**
 - [backend_abstraction.md](architecture/backend_abstraction.md) §2–§5, §7–§10
