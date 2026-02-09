@@ -402,7 +402,7 @@ The Docker backend's `tool_instructions()` returns this text (with configured va
 
 The **120 seconds** and **2 MB** values in this text reflect the server's actual configured `--timeout` and `--output-limit`, not hardcoded defaults. If the user starts the server with `--timeout 300 --output-limit 10485760`, the description says "300 seconds" and "10 MB."
 
-When a custom image is configured, the description may adjust (e.g., "an isolated Linux sandbox" instead of "an isolated Debian Linux sandbox") based on image metadata.
+When a custom image is configured, no description is returned. The user must provide a tool description override. 
 
 ---
 
@@ -422,11 +422,7 @@ kilntainers
 
 **Effective configuration:** Docker backend, `debian:bookworm-slim` image, bash shell, network disabled, 120s timeout, 2 MiB output limit, stdio transport.
 
-**Tool description seen by the LLM:**
-
-> Execute a shell command in an isolated Debian Linux sandbox. Commands run in bash. Each call is independent — no state (shell variables, working directory, background processes) persists between calls. Use the working_directory parameter or chain commands with && to control execution context.
->
-> To write files or pass data without shell escaping, use the stdin parameter (e.g., command="cat > file.txt" with content in stdin). Commands time out after 120 seconds by default (override with the timeout parameter for long-running operations). Output is limited to 2 MB — commands exceeding this limit are terminated with no output returned. Use head, tail, or grep to manage large outputs.
+**Tool description seen by the LLM:**: See above example in §7
 
 ---
 
@@ -442,7 +438,7 @@ kilntainers --engine podman
 
 **Effective configuration:** Docker backend with Podman engine, `debian:bookworm-slim` image, bash shell, network disabled, 120s timeout, 2 MiB output limit, stdio transport. All subprocess calls invoke `podman` instead of `docker`.
 
-**Tool description seen by the LLM:** Identical to §8.1 — the container engine is an implementation detail invisible to the agent.
+**Tool description seen by the LLM:** Identical to §7 — the container engine is an implementation detail invisible to the agent.
 
 ---
 
@@ -458,18 +454,10 @@ kilntainers \
   --network \
   --timeout 300 \
   --memory 4g \
-  --extended-tool-instruction "This sandbox includes Python 3.12 with numpy, pandas, matplotlib, scipy, and scikit-learn pre-installed. Network access is enabled — you can pip install additional packages or download datasets with curl/wget."
+  --tool-instruction-override "A Debian linux sandbox running bash. This sandbox includes Python 3.12 with numpy, pandas, matplotlib, scipy, and scikit-learn pre-installed. Network access is enabled — you can pip install additional packages or download datasets with curl/wget."
 ```
 
-**Tool description seen by the LLM:**
-
-> Execute a shell command in an isolated Linux sandbox. Commands run in bash. Each call is independent — no state (shell variables, working directory, background processes) persists between calls. Use the working_directory parameter or chain commands with && to control execution context.
->
-> To write files or pass data without shell escaping, use the stdin parameter (e.g., command="cat > file.txt" with content in stdin). Commands time out after 300 seconds by default (override with the timeout parameter for long-running operations). Output is limited to 2 MB — commands exceeding this limit are terminated with no output returned. Use head, tail, or grep to manage large outputs.
->
-> This sandbox includes Python 3.12 with numpy, pandas, matplotlib, scipy, and scikit-learn pre-installed. Network access is enabled — you can pip install additional packages or download datasets with curl/wget.
-
-*Note how `--extended-tool-instruction` is appended after a double newline. The backend's base description reflects the custom timeout (300s). The extended instruction adds context about the custom image's capabilities.*
+**Tool description seen by the LLM:** the tool-instruction-override param, nothing else
 
 ---
 
@@ -491,33 +479,38 @@ kilntainers \
 
 **Tool description seen by the LLM:**
 
+
 > Execute a shell command in a remote cloud VM (Modal). Commands run in bash. Each call is independent — no state persists between calls. Use the working_directory parameter or chain commands with && to control execution context.
 >
-> To write files or pass data without shell escaping, use the stdin parameter (e.g., command="cat > file.txt" with content in stdin). Commands time out after 600 seconds by default (override with the timeout parameter for long-running operations). Output is limited to 2 MB — commands exceeding this limit are terminated with no output returned. Use head, tail, or grep to manage large outputs.
+> To write files or pass data without shell escaping, use the stdin parameter (e.g., command="cat > file.txt" with content in stdin). Commands time out after 600 seconds by default (override with the timeout parameter for long-running operations). 
 >
 > This is a remote cloud VM with an NVIDIA A10G GPU. CUDA toolkit and PyTorch are available. Network access is enabled.
+
+
+*Note: this is just a draft we can refine later*
 
 *Note: `--gpu` and authentication are hypothetical examples of backend-specific flat args (D12). The MCP tool interface (`shell_exec` with the same parameters and response schema) is identical across backends. Only the backend's tool description changes to reflect the environment.*
 
 ---
 
-### 8.5 WASI BusyBox Sandbox (Hypothetical Future Backend)
+### 8.5 WASI with default BusyBox Sandbox (Hypothetical Future Backend)
 
-A minimal WebAssembly sandbox with limited capabilities. Uses `--tool-instruction-override` because the environment is so different from a full Linux system that the entire description must be custom-written.
+A minimal WebAssembly sandbox with limited capabilities. 
+
+Has a default wasm module for a POSIX busybox, but could pass a custom wasm module as well.
 
 **CLI:**
 
 ```bash
 kilntainers \
-  --backend wasi-busybox \
-  --tool-instruction-override "Execute a command in a lightweight POSIX sandbox. Only sh (POSIX shell) is available — do not use bash-specific syntax like arrays, [[ ]], or process substitution. Available commands: ls, cat, grep, sed, awk, sort, uniq, wc, head, tail, find, mkdir, rm, cp, mv, echo, printf, test, tr, cut, tee, xargs, dirname, basename. No package manager. No network access. No persistent state between calls. To write files or pass data without shell escaping, use the stdin parameter (e.g., command='cat > file.txt' with content in stdin). Commands time out after 120 seconds. Output is limited to 2 MB."
+  --backend wasi \
 ```
 
 **Tool description seen by the LLM:**
 
-> Execute a command in a lightweight POSIX sandbox. Only sh (POSIX shell) is available — do not use bash-specific syntax like arrays, [[ ]], or process substitution. Available commands: ls, cat, grep, sed, awk, sort, uniq, wc, head, tail, find, mkdir, rm, cp, mv, echo, printf, test, tr, cut, tee, xargs, dirname, basename. No package manager. No network access. No persistent state between calls. To write files or pass data without shell escaping, use the stdin parameter (e.g., command='cat > file.txt' with content in stdin). Commands time out after 120 seconds. Output is limited to 2 MB.
+> Execute a command in a lightweight POSIX sandbox. Only sh (POSIX shell) is available — do not use bash-specific syntax like arrays, [[ ]], or process substitution. Available commands: ls, cat, grep, sed, awk, sort, uniq, wc, head, tail, find, mkdir, rm, cp, mv, echo, printf, test, tr, cut, tee, xargs, dirname, basename. No package manager. No network access. No persistent state between calls except for filesystem. To write files or pass data without shell escaping, use the stdin parameter (e.g., command='cat > file.txt' with content in stdin). Commands time out after 120 seconds.
 
-*Note: This uses `--tool-instruction-override` because the WASI backend's `tool_instructions()` may return null (the backend can't describe itself adequately), or the user wants full control over describing the limited environment. The override replaces everything — the user is responsible for the complete description.*
+*Note: This without custom module parameter the backend can describe the sandbox well. However if overrided with a custom wasm module, we'd want to force the user to describe it with --tool-instruction-override, and not return a default.*
 
 ---
 
