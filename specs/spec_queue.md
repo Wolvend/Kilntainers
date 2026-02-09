@@ -69,3 +69,45 @@ Items marked with [x] have been decided (see [decisions.md](decisions.md)) but m
 ---
 
 *Last updated after functional spec. All items resolved except Testing Strategy, which is deferred to the architecture/implementation phase.*
+
+---
+
+## Architecture Specification
+
+This section tracks the creation of detailed architecture documents. Unlike the functional spec (which defines *what* the system does), architecture docs define *how* it is built — module structure, class hierarchies, data flow, and implementation patterns.
+
+### Process
+
+1. **Create `specs/architecture/` folder** for all architecture sub-documents.
+2. **Work through each phase below in order.** Each phase produces a focused architecture document in `specs/architecture/`. Phases build on each other, so earlier phases inform later ones.
+3. **Each phase document should include a testing section** covering how that layer/component is tested (unit tests, mocks, integration tests as appropriate). Testing is not a separate phase — it is part of every phase.
+4. **Review each phase with the user before marking complete.** Present key decisions and design details for confirmation. When confirmed, mark the phase `[x]` below.
+5. **After all phases are complete**, write `specs/architecture/architecture_summary.md` — a short index document that points to each sub-document with a high-level description of what it covers.
+
+### Phases
+
+- [ ] **Phase 1: Project structure & packaging** (`project_structure.md`)
+  Python package layout, directory structure, entry points, dependency management (pyproject.toml / requirements), and naming conventions. Establishes the skeleton everything else lives in.
+
+- [ ] **Phase 2: Backend abstraction layer** (`backend_abstraction.md`)
+  The Python ABC definitions for Backend and Sandbox, method signatures, type contracts, async patterns, and how the MCP layer interacts with backends without knowing which one is running. This is the central interface — get it right before implementing either side.
+
+- [ ] **Phase 3: Docker backend implementation** (`docker_backend.md`)
+  How the Docker backend implements the abstraction: subprocess calls to the Docker CLI, container create/start/exec/stop flows, `--rm` and labeling, image pull mechanics, readiness checks, timeout and output-limit enforcement at the process level, death detection, and resource limit passthrough.
+
+- [ ] **Phase 4: MCP server & tool layer** (`mcp_server.md`)
+  How the MCP server is structured. Tool registration, request validation, response formatting, tool description assembly, and how the server delegates to the backend. Covers both stdio and Streamable HTTP wiring. Note: the MCP Python ecosystem has two libraries — `mcp` (official low-level SDK) and `FastMCP` (higher-level, separate project). This phase should evaluate and decide which to use.
+
+- [ ] **Phase 5: CLI, configuration & startup** (`cli_and_startup.md`)
+  Argument parsing (library choice, arg definitions), startup validation sequence, how backend-specific args are routed, configuration objects, and the full startup flow from process launch to "ready to accept connections."
+
+- [ ] **Phase 6: Connection & session lifecycle** (`connection_lifecycle.md`)
+  How stdio and Streamable HTTP transports map to sandbox lifecycles. Session tracking for HTTP (creation, idle timeout, teardown), sandbox ownership, graceful shutdown orchestration, and sandbox death propagation to the MCP layer.
+
+- [ ] **Phase 7: Error handling & observability** (`error_handling.md`)
+  Error propagation paths from backend through MCP layer to client. How timeout, output-limit, sandbox death, and validation errors are caught, transformed, and reported. Startup error reporting. Stderr usage patterns. Any structured error types or exception hierarchy.
+
+### Completion
+
+- [ ] **Architecture summary** (`architecture_summary.md`)
+  Written after all phases above are complete. A short document that lists each sub-document with a 1–2 sentence description of what it covers, serving as the entry point for anyone reading the architecture docs.
