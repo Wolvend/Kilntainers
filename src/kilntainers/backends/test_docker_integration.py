@@ -64,6 +64,28 @@ async def sandbox(docker_backend):
     await sb.stop()
 
 
+# --- Connection Tests ---
+
+
+class TestConnection:
+    """Tests for Docker host connection configuration."""
+
+    @pytest.mark.docker_integration
+    @pytest.mark.asyncio
+    async def test_bad_host_fails_validation(self, engine):
+        """A bad --docker-host value causes validation to fail with BackendError."""
+        config = DockerBackendConfig(
+            engine=engine,
+            host="tcp://192.0.2.1:1",  # RFC 5737 non-routable
+        )
+        backend = DockerBackend(config)
+
+        with pytest.raises(BackendError) as exc_info:
+            await backend.validate()
+
+        assert "Cannot connect to" in str(exc_info.value)
+
+
 # --- Lifecycle Tests ---
 
 

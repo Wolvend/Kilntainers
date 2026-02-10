@@ -118,9 +118,16 @@ Verify the full pipeline works end-to-end: CLI → startup → FastMCP → tool 
 
 ---
 
-## Phase 7: Modal Backend
+## Phase 7: Modal Backend ✅
 
-- [ ] Implement `spec/architecture/modal_backend.md`
+Implement `spec/architecture/modal_backend.md`
+
+- [x] Create `src/kilntainers/backends/modal.py` — `ModalBackendConfig`, `ModalBackend`, `ModalSandbox`, `_OutputLimitExceeded`
+- [x] Add `modal` package dependency (already in pyproject.toml)
+- [x] Update `src/kilntainers/backends/__init__.py` — register `ModalBackend` in `BACKEND_REGISTRY`
+- [x] Unit tests (`src/kilntainers/backends/test_modal.py`): mock Modal SDK, test all backend and sandbox methods
+
+**Architecture reference:** [modal_backend.md](architecture/modal_backend.md)
 
 
 ---
