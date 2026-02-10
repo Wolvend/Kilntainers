@@ -9,6 +9,7 @@ Skip with: pytest -m "not docker_integration"
 """
 
 import asyncio
+import shutil
 import subprocess
 
 import pytest
@@ -21,8 +22,14 @@ from kilntainers.errors import SandboxDiedError
 
 @pytest.fixture(params=["docker", "podman"])
 def engine(request):
-    """Parameterize tests over container engine (docker, podman)."""
-    return request.param
+    """Parameterize tests over container engine (docker, podman).
+
+    Automatically skips if the engine CLI is not installed on the system.
+    """
+    engine = request.param
+    if shutil.which(engine) is None:
+        pytest.skip(f"{engine} CLI not installed")
+    return engine
 
 
 @pytest.fixture
