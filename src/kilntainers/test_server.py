@@ -33,10 +33,7 @@ def server_config() -> ServerConfig:
 @pytest.fixture
 def mock_backend() -> MockBackend:
     """Return a mock backend for testing."""
-    return MockBackend(
-        BackendConfig(),
-        tool_instructions="A Debian Linux bash shell"
-    )
+    return MockBackend(BackendConfig(), tool_instructions="A Debian Linux bash shell")
 
 
 @pytest.fixture

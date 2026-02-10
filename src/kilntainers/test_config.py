@@ -4,7 +4,8 @@ from dataclasses import FrozenInstanceError
 
 import pytest
 
-from kilntainers.config import DockerBackendConfig, ServerConfig
+from kilntainers.backends.docker import DockerBackendConfig
+from kilntainers.config import ServerConfig
 
 # --- ServerConfig Tests ---
 

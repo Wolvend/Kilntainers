@@ -15,9 +15,12 @@ import subprocess
 import pytest
 
 from kilntainers.backends.base import ExecRequest
-from kilntainers.backends.docker import DockerBackend, DockerSandbox
-from kilntainers.config import DockerBackendConfig
-from kilntainers.errors import SandboxDiedError
+from kilntainers.backends.docker import (
+    DockerBackend,
+    DockerBackendConfig,
+    DockerSandbox,
+)
+from kilntainers.errors import BackendError, SandboxDiedError
 
 
 @pytest.fixture(params=["docker", "podman"])
@@ -34,10 +37,18 @@ def engine(request):
 
 @pytest.fixture
 async def docker_backend(engine):
-    """Create a real Docker/Podman backend instance for the given engine."""
+    """Create a real Docker/Podman backend instance for the given engine.
+
+    Automatically skips if the engine daemon is not running.
+    """
     config = DockerBackendConfig(engine=engine)
     backend = DockerBackend(config)
-    await backend.validate()
+    try:
+        await backend.validate()
+    except BackendError as e:
+        if f"Is the {engine} daemon running?" in str(e):
+            pytest.skip(f"{engine} daemon not running")
+        raise
     return backend
 
 

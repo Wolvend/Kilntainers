@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from kilntainers.backends.docker import DockerBackendConfig
 from kilntainers.cli import (
     _UNSET,
     _async_main,
@@ -14,7 +15,7 @@ from kilntainers.cli import (
     main,
     validate_config,
 )
-from kilntainers.config import DockerBackendConfig, ServerConfig
+from kilntainers.config import ServerConfig
 from kilntainers.errors import BackendError
 
 # ================

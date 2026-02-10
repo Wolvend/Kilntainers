@@ -11,10 +11,10 @@ import pytest
 from kilntainers.backends.base import ExecRequest
 from kilntainers.backends.docker import (
     DockerBackend,
+    DockerBackendConfig,
     DockerSandbox,
     _DockerSandboxState,
 )
-from kilntainers.config import DockerBackendConfig
 from kilntainers.errors import BackendError, SandboxDiedError
 
 # --- Mock subprocess utilities ---

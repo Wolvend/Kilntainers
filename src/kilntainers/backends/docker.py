@@ -3,13 +3,30 @@
 import argparse
 import asyncio
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from kilntainers.backends.base import Backend, ExecRequest, ExecResult, Sandbox
-from kilntainers.config import BackendConfig, DockerBackendConfig
+from kilntainers.config import BackendConfig
 from kilntainers.errors import BackendError, SandboxDiedError
 
 DEFAULT_IMAGE = "debian:bookworm-slim"
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class DockerBackendConfig(BackendConfig):
+    """Configuration for the Docker backend.
+
+    Populated from CLI args by DockerBackend.config_from_args().
+    Consumed by DockerBackend.
+    """
+
+    engine: str = "docker"
+    image: str = "debian:bookworm-slim"
+    shell: str = "/bin/bash"
+    network_enabled: bool = False
+    cpu: str | None = None
+    memory: str | None = None
+    docker_run_flags: list[str] = field(default_factory=list)
 
 
 class _OutputLimitExceeded(Exception):

@@ -1,6 +1,6 @@
 """Configuration dataclasses."""
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Literal
 
 Transport = Literal["stdio", "http"]
@@ -41,20 +41,3 @@ class ServerConfig:
 
     # Session management (HTTP only)
     session_timeout: int = 300  # seconds (5 minutes)
-
-
-@dataclass(frozen=True, slots=True, kw_only=True)
-class DockerBackendConfig(BackendConfig):
-    """Configuration for the Docker backend.
-
-    Populated from CLI args by the startup layer. Consumed by
-    DockerBackend (Phase 3).
-    """
-
-    engine: str = "docker"
-    image: str = "debian:bookworm-slim"
-    shell: str = "/bin/bash"
-    network_enabled: bool = False
-    cpu: str | None = None
-    memory: str | None = None
-    docker_run_flags: list[str] = field(default_factory=list)
