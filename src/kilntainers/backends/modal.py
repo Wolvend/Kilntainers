@@ -391,7 +391,7 @@ class ModalSandbox(Sandbox):
             # Modal's API stalls after output streams close.
             await asyncio.wait_for(
                 process.wait.aio(),
-                timeout=request.timeout + 15,
+                timeout=request.timeout + 5,
             )
             exit_code = process.returncode
 
