@@ -958,7 +958,7 @@ skip_without_docker = pytest.mark.skipif(
 )
 ```
 
-Applied to all docker integration test classes/modules with `@pytest.mark.docker_integration`. CI runs on `ubuntu-latest` which includes Docker; local development environments may not.
+Applied to all docker integration test classes/modules with `@pytest.mark.integration`. CI runs on `ubuntu-latest` which includes Docker; local development environments may not.
 
 ---
 

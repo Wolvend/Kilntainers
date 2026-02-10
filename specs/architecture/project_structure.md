@@ -315,7 +315,7 @@ pytest markers to control which tests run:
 
 ```python
 # in pyproject.toml
-@pytest.mark.docker_integration  # requires Docker
+@pytest.mark.integration  # Integration Test - Requires External Service
 ```
 
 `checks.sh` and CI run unit and docker integration tests as separate steps for clear signal.

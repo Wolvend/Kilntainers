@@ -1,9 +1,9 @@
 """Integration tests for Modal backend.
 
 These tests require Modal authentication and are marked with
-@pytest.mark.modal_integration. They execute real Modal sandboxes and verify
-the full integration. Run with: pytest -m modal_integration
-Skip with: pytest -m "not modal_integration"
+@pytest.mark.integration. They execute real Modal sandboxes and verify
+the full integration. Run with: pytest -m integration
+Skip with: pytest -m "not integration"
 
 NOTE: These tests will incur actual Modal costs when run.
 """
@@ -31,7 +31,6 @@ def _modal_auth_available() -> bool:
     # Try to validate with Modal client (may fail if no auth)
     try:
         # Modal will check for auth token
-
         # Just import check - actual validation happens in tests
         return True
     except Exception:
@@ -81,7 +80,7 @@ async def sandbox(modal_backend):
 class TestConnection:
     """Tests for Modal connection configuration."""
 
-    @pytest.mark.modal_integration
+    @pytest.mark.integration
     @pytest.mark.asyncio
     @skip_without_modal
     async def test_backend_validation_succeeds(self):
@@ -139,235 +138,28 @@ class TestConnection:
                 os.environ.pop("MODAL_TOKEN_SECRET", None)
 
 
-# --- Lifecycle Tests ---
+# --- Modal Specific Lifecycle Tests ---
 
 
-class TestLifecycle:
-    """Tests for sandbox lifecycle operations."""
+@pytest.mark.integration
+class TestModalLifecycle:
+    """Tests for Modal-specific sandbox lifecycle operations."""
 
     @pytest.mark.modal_integration
     @pytest.mark.asyncio
     @skip_without_modal
-    async def test_create_sandbox(self, modal_backend):
-        """Sandbox creation succeeds."""
+    async def test_create_sandbox_type(self, modal_backend):
+        """Sandbox creation returns correct type."""
         sb = await modal_backend.create_sandbox()
         assert isinstance(sb, ModalSandbox)
         assert sb.sandbox_id is not None
-        assert len(sb.sandbox_id) > 0
         await sb.stop()
-
-    @pytest.mark.modal_integration
-    @pytest.mark.asyncio
-    @skip_without_modal
-    async def test_readiness_check(self, sandbox):
-        """Sandbox passes readiness check (implicit in creation)."""
-        # If this test runs, readiness check passed
-        assert sandbox.sandbox_id is not None
-
-    @pytest.mark.modal_integration
-    @pytest.mark.asyncio
-    @skip_without_modal
-    async def test_stop(self, sandbox):
-        """Stop terminates the sandbox."""
-        await sandbox.stop()
-        assert sandbox._stopped
-
-    @pytest.mark.modal_integration
-    @pytest.mark.asyncio
-    @skip_without_modal
-    async def test_stop_idempotent(self, sandbox):
-        """Stop can be called multiple times safely."""
-        await sandbox.stop()
-        await sandbox.stop()
-        await sandbox.stop()
-        assert sandbox._stopped
-
-
-# --- Basic Exec Tests ---
-
-
-class TestBasicExec:
-    """Tests for basic command execution."""
-
-    @pytest.mark.modal_integration
-    @pytest.mark.asyncio
-    @skip_without_modal
-    async def test_echo_success(self, sandbox):
-        """Simple echo command works."""
-        request = ExecRequest(command="echo hello world", timeout=5, output_limit=1024)
-        result = await sandbox.exec(request)
-        assert result.exit_code == 0
-        assert "hello world" in result.stdout
-        assert result.stderr == ""
-
-    @pytest.mark.modal_integration
-    @pytest.mark.asyncio
-    @skip_without_modal
-    async def test_false_fails(self, sandbox):
-        """Command that fails returns non-zero exit."""
-        request = ExecRequest(command="false", timeout=5, output_limit=1024)
-        result = await sandbox.exec(request)
-        assert result.exit_code == 1
-
-    @pytest.mark.modal_integration
-    @pytest.mark.asyncio
-    @skip_without_modal
-    async def test_nonexistent_file(self, sandbox):
-        """Nonexistent file produces error output."""
-        request = ExecRequest(command="ls /nonexistent", timeout=5, output_limit=1024)
-        result = await sandbox.exec(request)
-        assert result.exit_code != 0
-        assert "No such file" in result.stderr
-
-
-# --- Command vs Args Mode Tests ---
-
-
-class TestCommandVsArgsMode:
-    """Tests for command mode vs args mode."""
-
-    @pytest.mark.modal_integration
-    @pytest.mark.asyncio
-    @skip_without_modal
-    async def test_command_mode_shell_features(self, sandbox):
-        """Command mode supports shell features like pipes and redirects."""
-        request = ExecRequest(
-            command="echo hello | tr a-z A-Z", timeout=5, output_limit=1024
-        )
-        result = await sandbox.exec(request)
-        assert result.exit_code == 0
-        assert "HELLO" in result.stdout
-
-    @pytest.mark.modal_integration
-    @pytest.mark.asyncio
-    @skip_without_modal
-    async def test_args_mode_no_shell(self, sandbox):
-        """Args mode does not use shell interpretation."""
-        # Args mode runs echo directly, treating "|", "tr", etc. as arguments
-        request = ExecRequest(
-            args=["echo", "hello | tr a-z A-Z"], timeout=5, output_limit=1024
-        )
-        result = await sandbox.exec(request)
-        assert result.exit_code == 0
-        assert "hello | tr a-z A-Z" in result.stdout  # Literal output
-
-
-# --- Working Directory Tests ---
-
-
-class TestWorkingDirectory:
-    """Tests for working_directory parameter."""
-
-    @pytest.mark.modal_integration
-    @pytest.mark.asyncio
-    @skip_without_modal
-    async def test_working_directory(self, sandbox):
-        """Working directory changes execution context."""
-        request = ExecRequest(
-            command="pwd", working_directory="/tmp", timeout=5, output_limit=1024
-        )
-        result = await sandbox.exec(request)
-        assert result.exit_code == 0
-        assert "/tmp" in result.stdout
-
-    @pytest.mark.modal_integration
-    @pytest.mark.asyncio
-    @skip_without_modal
-    async def test_working_directory_with_command(self, sandbox):
-        """Working directory works with complex commands."""
-        request = ExecRequest(
-            command="pwd && ls", working_directory="/etc", timeout=5, output_limit=1024
-        )
-        result = await sandbox.exec(request)
-        assert result.exit_code == 0
-        assert "/etc" in result.stdout
-
-
-# --- Stdin Tests ---
-
-
-class TestStdin:
-    """Tests for stdin parameter."""
-
-    @pytest.mark.modal_integration
-    @pytest.mark.asyncio
-    @skip_without_modal
-    async def test_stdin_piping(self, sandbox):
-        """Stdin data is piped to command."""
-        request = ExecRequest(
-            command="cat", stdin="hello from stdin", timeout=5, output_limit=1024
-        )
-        result = await sandbox.exec(request)
-        assert result.exit_code == 0
-        assert "hello from stdin" in result.stdout
-
-    @pytest.mark.modal_integration
-    @pytest.mark.asyncio
-    @skip_without_modal
-    async def test_stdin_special_characters(self, sandbox):
-        """Stdin handles special characters correctly."""
-        special_input = "Hello\nWorld\t!"
-        request = ExecRequest(
-            command="cat", stdin=special_input, timeout=5, output_limit=1024
-        )
-        result = await sandbox.exec(request)
-        assert result.exit_code == 0
-        # Verify newline and tab are preserved in round-trip
-        assert "Hello\nWorld" in result.stdout
-        assert "\t!" in result.stdout
-
-
-# --- Filesystem E2E Tests ---
-
-
-class TestFilesystemE2E:
-    """End-to-end tests: filesystem state persists across execs in same sandbox."""
-
-    @pytest.mark.modal_integration
-    @pytest.mark.asyncio
-    @skip_without_modal
-    async def test_stdin_to_file_then_cat(self, sandbox):
-        """Write stdin to a file in one exec; read it back in the next."""
-        content = "e2e filesystem content\nline two"
-        write_request = ExecRequest(
-            command="cat > /tmp/e2e_content",
-            stdin=content,
-            timeout=5,
-            output_limit=1024,
-        )
-        write_result = await sandbox.exec(write_request)
-        assert write_result.exit_code == 0
-
-        read_request = ExecRequest(
-            command="cat /tmp/e2e_content", timeout=5, output_limit=1024
-        )
-        read_result = await sandbox.exec(read_request)
-        assert read_result.exit_code == 0
-        assert read_result.stdout == content
-
-    @pytest.mark.modal_integration
-    @pytest.mark.asyncio
-    @skip_without_modal
-    async def test_mkdir_then_ls(self, sandbox):
-        """Create a directory in one exec; list it in the next."""
-        dir_path = "/tmp/e2e_testdir"
-        mkdir_request = ExecRequest(
-            command=f"mkdir {dir_path}", timeout=5, output_limit=1024
-        )
-        mkdir_result = await sandbox.exec(mkdir_request)
-        assert mkdir_result.exit_code == 0
-
-        ls_request = ExecRequest(
-            command=f"ls -d {dir_path}", timeout=5, output_limit=1024
-        )
-        ls_result = await sandbox.exec(ls_request)
-        assert ls_result.exit_code == 0
-        assert dir_path in ls_result.stdout or "e2e_testdir" in ls_result.stdout
 
 
 # --- Timeout Tests ---
 
 
+@pytest.mark.integration
 class TestTimeout:
     """Tests for timeout enforcement."""
 
@@ -383,70 +175,10 @@ class TestTimeout:
         assert result.exit_code == -1
 
 
-# --- Output Limit Tests ---
-
-
-class TestOutputLimit:
-    """Tests for output_limit enforcement."""
-
-    @pytest.mark.modal_integration
-    @pytest.mark.asyncio
-    @skip_without_modal
-    async def test_output_limit_exceeded(self, sandbox):
-        """Command generating excessive output is terminated."""
-        # Use yes to generate infinite output
-        request = ExecRequest(command="yes", timeout=5, output_limit=1024)
-        result = await sandbox.exec(request)
-        assert result.exit_code == 1
-        assert "output limit exceeded" in result.stderr
-        assert result.stdout == ""
-
-
-# --- Stateless Execution Tests ---
-
-
-class TestStatelessExecution:
-    """Tests for state isolation between exec calls."""
-
-    @pytest.mark.modal_integration
-    @pytest.mark.asyncio
-    @skip_without_modal
-    async def test_exports_dont_persist(self, sandbox):
-        """Shell variable exports don't persist across calls."""
-        # Set a variable
-        request1 = ExecRequest(
-            command="export MY_VAR=test && echo $MY_VAR",
-            timeout=5,
-            output_limit=1024,
-        )
-        result1 = await sandbox.exec(request1)
-        assert "test" in result1.stdout
-
-        # Variable should not persist
-        request2 = ExecRequest(command="echo $MY_VAR", timeout=5, output_limit=1024)
-        result2 = await sandbox.exec(request2)
-        assert "test" not in result2.stdout
-
-    @pytest.mark.modal_integration
-    @pytest.mark.asyncio
-    @skip_without_modal
-    async def test_cd_doesnt_persist(self, sandbox):
-        """Directory changes don't persist across calls."""
-        # Change directory
-        request1 = ExecRequest(command="cd /tmp && pwd", timeout=5, output_limit=1024)
-        result1 = await sandbox.exec(request1)
-        assert "/tmp" in result1.stdout
-
-        # Should be back in original directory
-        request2 = ExecRequest(command="pwd", timeout=5, output_limit=1024)
-        result2 = await sandbox.exec(request2)
-        assert "/" in result2.stdout or "/root" in result2.stdout
-        assert "/tmp" not in result2.stdout
-
-
 # --- Network Isolation Tests ---
 
 
+@pytest.mark.integration
 class TestNetworkIsolation:
     """Tests for network isolation behavior."""
 
@@ -493,6 +225,7 @@ class TestNetworkIsolation:
 # --- Exec Lock Tests ---
 
 
+@pytest.mark.integration
 class TestExecLock:
     """Tests for exec serialization via lock."""
 
@@ -521,6 +254,7 @@ class TestExecLock:
 # --- Death Detection Tests ---
 
 
+@pytest.mark.integration
 class TestDeathDetection:
     """Tests for unexpected sandbox death detection."""
 
@@ -562,6 +296,7 @@ class TestDeathDetection:
 # --- Tool Instructions Tests ---
 
 
+@pytest.mark.integration
 class TestToolInstructions:
     """Tests for tool_instructions method."""
 
@@ -593,6 +328,7 @@ class TestToolInstructions:
 # --- Custom Shell Tests ---
 
 
+@pytest.mark.integration
 class TestCustomShell:
     """Tests for custom shell configuration."""
 

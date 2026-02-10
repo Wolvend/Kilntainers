@@ -23,7 +23,7 @@ Set up the `src/kilntainers/` package layout, entry points, and build configurat
 
 **Architecture reference:** [project_structure.md](architecture/project_structure.md) §1–§10
 
-**Convention override:** Tests are co-located beside the files they test with a `test_` prefix (e.g., `errors.py` → `test_errors.py`, `backends/docker.py` → `backends/test_docker.py`), not in a separate `tests/` directory. Integration tests that require Docker use a `_integration` suffix (e.g., `backends/test_docker_integration.py`) and are marked with `@pytest.mark.docker_integration`.
+**Convention override:** Tests are co-located beside the files they test with a `test_` prefix (e.g., `errors.py` → `test_errors.py`, `backends/docker.py` → `backends/test_docker.py`), not in a separate `tests/` directory. Integration tests that require Docker use a `_integration` suffix (e.g., `backends/test_docker_integration.py`) and are marked with `@pytest.mark.integration`.
 
 ---
 
@@ -56,7 +56,7 @@ Implement `DockerBackend` and `DockerSandbox` — the full Docker container life
 - [x] `backends/docker.py` — `DockerSandbox` class: `exec()` with lock, `_do_exec()` (subprocess, timeout via `asyncio.wait_for`, output limit via `_communicate_with_limit`), `_build_exec_command()`, `stop()` (idempotent, best-effort), `wait_for_death()` (docker wait + stop-requested flag), `sandbox_id` property
 - [x] `backends/docker.py` — `_OutputLimitExceeded` private exception, `_run_docker` CLI helper
 - [x] Unit tests (`backends/test_docker.py`): mock `asyncio.create_subprocess_exec` to test command construction, timeout handling, output limit enforcement, stdin piping, stop idempotency, death detection, tool instructions (default vs custom image), docker run command assembly
-- [x] Integration tests (`backends/test_docker_integration.py`, marked `@pytest.mark.docker_integration`): basic exec, command vs args mode, working directory, stdin piping, timeout with real sleep, output limit with real output, stateless execution, network isolation, death detection (docker kill), container cleanup after stop, label verification
+- [x] Integration tests (`backends/test_docker_integration.py`, marked `@pytest.mark.integration`): basic exec, command vs args mode, working directory, stdin piping, timeout with real sleep, output limit with real output, stateless execution, network isolation, death detection (docker kill), container cleanup after stop, label verification
 
 **Architecture reference:** [docker_backend.md](architecture/docker_backend.md) §2–§9
 
@@ -106,11 +106,10 @@ Verify the full pipeline works end-to-end: CLI → startup → FastMCP → tool 
 
 **What to build:**
 
-- [x] Verify end-to-end: install the package, run `kilntainers` as an MCP server, connect a client, execute commands, receive responses
-- [x] Stdio lifecycle integration tests: full session (start → exec → stop), sandbox creation failure handling, graceful shutdown (stdin EOF, SIGTERM)
-- [x] Death propagation integration test: kill container externally, verify server exits
-- [x] CI configuration: ensure `build_and_test.yml` runs unit tests (no Docker) and integration tests (with Docker on ubuntu-latest) as separate steps
-- [x] Polish: verify `--help` output, test with a real MCP client (e.g. Claude Desktop or similar), fix any rough edges
+- [ ] Verify end-to-end: install the package, run `kilntainers` as an MCP server, connect a client, execute commands, receive responses
+- [ ] Stdio lifecycle integration tests: full session (start → exec → stop), sandbox creation failure handling, graceful shutdown (stdin EOF, SIGTERM)
+- [ ] Death propagation integration test: kill container externally, verify server exits
+- [ ] Polish: verify `--help` output, test with a real MCP client (e.g. Claude Desktop or similar), fix any rough edges
 
 **Architecture references:**
 - [connection_lifecycle.md](architecture/connection_lifecycle.md) §2 (stdio lifecycle), §6 (death propagation), §7 (graceful shutdown)
