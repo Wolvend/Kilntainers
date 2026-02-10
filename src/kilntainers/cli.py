@@ -133,10 +133,9 @@ def build_configs(
 
 
 def _startup_error(message: str) -> NoReturn:
-    """Print an error message to stderr and exit with code 1.
+    """Write an error message to stderr and exit with code 1.
 
-    Used for all startup/configuration errors. Follows D31 (no logging —
-    stderr for error reporting).
+    Used for all startup/configuration errors.
 
     Args:
         message: The error message to display.
@@ -144,7 +143,7 @@ def _startup_error(message: str) -> NoReturn:
     Raises:
         SystemExit: Always exits with code 1.
     """
-    print(f"kilntainers: error: {message}", file=sys.stderr)
+    sys.stderr.write(f"kilntainers: error: {message}\n")
     sys.exit(1)
 
 

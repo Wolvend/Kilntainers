@@ -445,7 +445,7 @@ def test_validate_config_output_limit_minimum_valid():
 
 
 def test_startup_error_exits_with_code_1(capsys):
-    """Test that _startup_error prints to stderr and exits with code 1."""
+    """Test that _startup_error writes to stderr and exits with code 1."""
     with pytest.raises(SystemExit) as exc_info:
         _startup_error("test error message")
 
