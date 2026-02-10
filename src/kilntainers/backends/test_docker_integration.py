@@ -25,7 +25,7 @@ from kilntainers.errors import BackendError, SandboxDiedError
 _engine_cache: dict[str, bool] = {}
 
 
-def validate_engine(engine: str) -> None:
+def validate_engine_available(engine: str) -> None:
     """Validate that the engine CLI is installed and the daemon is running."""
     available = _engine_cache.get(engine, None)
     if available is None:
@@ -40,7 +40,7 @@ async def get_docker_backend(engine: str) -> DockerBackend:
 
     Skips the test if the engine CLI is not installed or the daemon is not running.
     """
-    validate_engine(engine)
+    validate_engine_available(engine)
 
     config = DockerBackendConfig(engine=engine)
     backend = DockerBackend(config)
@@ -60,7 +60,7 @@ async def engine(request):
     Automatically skips if the engine CLI is not installed on the system.
     """
     engine = request.param
-    validate_engine(engine)
+    validate_engine_available(engine)
     return engine
 
 
