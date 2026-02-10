@@ -13,13 +13,7 @@ from kilntainers.backends.base import ExecRequest
 from kilntainers.backends.docker import DockerBackend, DockerBackendConfig
 from kilntainers.backends.modal import ModalBackend, ModalBackendConfig
 from kilntainers.errors import BackendError
-
-
-def _modal_auth_available() -> bool:
-    """Check if Modal authentication is configured."""
-    if os.getenv("MODAL_TOKEN_ID") and os.getenv("MODAL_TOKEN_SECRET"):
-        return True
-    return False
+from kilntainers.backends.test_modal_integration import _modal_auth_available
 
 
 @pytest.fixture(params=["docker", "podman", "modal"])
