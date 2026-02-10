@@ -1,5 +1,6 @@
 """Tests for backend abstraction layer — ABCs and shared types."""
 
+import argparse
 import asyncio
 from dataclasses import FrozenInstanceError
 
@@ -11,6 +12,7 @@ from kilntainers.backends.base import (
     ExecResult,
     Sandbox,
 )
+from kilntainers.config import BackendConfig
 from kilntainers.errors import SandboxDiedError
 
 # --- ExecRequest Tests ---
@@ -169,8 +171,17 @@ class TestExecResult:
 class StubBackend(Backend):
     """Minimal Backend implementation for testing ABC behavior."""
 
-    def __init__(self) -> None:
-        super().__init__()
+    @classmethod
+    def add_cli_arguments(cls, group: argparse._ArgumentGroup) -> None:
+        """Stub implementation - does nothing."""
+
+    @classmethod
+    def config_from_args(cls, args: argparse.Namespace) -> BackendConfig:
+        """Stub implementation - returns default config."""
+        return BackendConfig()
+
+    def __init__(self, config: BackendConfig) -> None:
+        super().__init__(config)
         self.validate_called = 0
         self.create_sandbox_called = 0
 
@@ -223,14 +234,14 @@ class TestBackendABC:
     @pytest.mark.asyncio
     async def test_validate_calls_validate_once(self) -> None:
         """First validate() call should call _validate()."""
-        backend = StubBackend()
+        backend = StubBackend(BackendConfig())
         await backend.validate()
         assert backend.validate_called == 1
 
     @pytest.mark.asyncio
     async def test_validate_caches_result(self) -> None:
         """Subsequent validate() calls should not call _validate()."""
-        backend = StubBackend()
+        backend = StubBackend(BackendConfig())
         await backend.validate()
         await backend.validate()
         await backend.validate()
@@ -239,7 +250,7 @@ class TestBackendABC:
     @pytest.mark.asyncio
     async def test_create_sandbox_auto_validates(self) -> None:
         """create_sandbox() should call validate() if not validated."""
-        backend = StubBackend()
+        backend = StubBackend(BackendConfig())
         await backend.create_sandbox()
         assert backend.validate_called == 1
         assert backend.create_sandbox_called == 1
@@ -247,7 +258,7 @@ class TestBackendABC:
     @pytest.mark.asyncio
     async def test_create_sandbox_does_not_revalidate(self) -> None:
         """create_sandbox() should not re-validate if already validated."""
-        backend = StubBackend()
+        backend = StubBackend(BackendConfig())
         await backend.validate()
         await backend.create_sandbox()
         assert backend.validate_called == 1
@@ -255,7 +266,7 @@ class TestBackendABC:
 
     def test_tool_instructions_returns_value(self) -> None:
         """tool_instructions() should return subclass value."""
-        backend = StubBackend()
+        backend = StubBackend(BackendConfig())
         assert backend.tool_instructions() == "stub instructions"
 
 

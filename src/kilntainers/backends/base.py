@@ -1,8 +1,13 @@
 """Backend abstraction layer — ABCs and shared types."""
 
+import argparse
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from types import TracebackType
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from kilntainers.config import BackendConfig
 
 # --- Shared types ---
 
@@ -146,8 +151,37 @@ class Backend(ABC):
     process. Creates independent Sandbox objects on demand.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, config: "BackendConfig") -> None:
+        """Initialize the backend with configuration.
+
+        Args:
+            config: The backend configuration.
+        """
         self._validated: bool = False
+        self._config = config
+
+    @classmethod
+    @abstractmethod
+    def add_cli_arguments(cls, group: argparse._ArgumentGroup) -> None:
+        """Register backend-specific CLI arguments on the given argparse group.
+
+        Args:
+            group: An argparse argument group to add arguments to.
+        """
+        ...
+
+    @classmethod
+    @abstractmethod
+    def config_from_args(cls, args: argparse.Namespace) -> "BackendConfig":
+        """Build backend config from parsed CLI arguments.
+
+        Args:
+            args: Parsed command-line arguments from argparse.
+
+        Returns:
+            A BackendConfig subclass instance with this backend's configuration.
+        """
+        ...
 
     async def validate(self) -> None:
         """Check all prerequisites. Raises BackendError on failure.

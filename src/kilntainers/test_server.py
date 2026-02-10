@@ -11,7 +11,7 @@ import pytest
 
 from kilntainers.backends.base import ExecResult
 from kilntainers.backends.test_utils import MockBackend, MockSandbox
-from kilntainers.config import ServerConfig
+from kilntainers.config import BackendConfig, ServerConfig
 from kilntainers.errors import BackendError
 from kilntainers.server import (
     SessionContext,
@@ -33,7 +33,10 @@ def server_config() -> ServerConfig:
 @pytest.fixture
 def mock_backend() -> MockBackend:
     """Return a mock backend for testing."""
-    return MockBackend(tool_instructions="A Debian Linux bash shell")
+    return MockBackend(
+        BackendConfig(),
+        tool_instructions="A Debian Linux bash shell"
+    )
 
 
 @pytest.fixture
@@ -80,7 +83,7 @@ def test_assemble_tool_description_backend_with_extended(
 
 def test_assemble_tool_description_no_backend_no_override() -> None:
     """No backend instructions and no override raises BackendError."""
-    backend = MockBackend(tool_instructions=None)
+    backend = MockBackend(BackendConfig(), tool_instructions=None)
     with pytest.raises(BackendError) as exc_info:
         assemble_tool_description(backend, override=None, extended=None)
     assert "does not provide tool instructions" in str(exc_info.value)
@@ -89,7 +92,7 @@ def test_assemble_tool_description_no_backend_no_override() -> None:
 
 def test_assemble_tool_description_empty_backend_no_override() -> None:
     """Backend returns empty string, no override raises BackendError."""
-    backend = MockBackend(tool_instructions="")
+    backend = MockBackend(BackendConfig(), tool_instructions="")
     with pytest.raises(BackendError) as exc_info:
         assemble_tool_description(backend, override=None, extended=None)
     assert "does not provide tool instructions" in str(exc_info.value)
@@ -97,7 +100,7 @@ def test_assemble_tool_description_empty_backend_no_override() -> None:
 
 def test_assemble_tool_description_both_override_and_extended() -> None:
     """Both override and extended raises BackendError."""
-    backend = MockBackend(tool_instructions="test")  # type: ignore[arg-type]
+    backend = MockBackend(BackendConfig(), tool_instructions="test")  # type: ignore[arg-type]
     with pytest.raises(BackendError) as exc_info:
         assemble_tool_description(
             backend,
@@ -609,7 +612,7 @@ def test_create_server_with_override_description(mock_backend: MockBackend) -> N
 
 def test_create_server_raises_on_empty_description() -> None:
     """create_server() raises BackendError if tool description assembly fails."""
-    backend = MockBackend(tool_instructions=None)
+    backend = MockBackend(BackendConfig(), tool_instructions=None)
     config = ServerConfig()
 
     with pytest.raises(BackendError) as exc_info:

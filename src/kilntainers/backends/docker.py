@@ -1,11 +1,12 @@
 """Docker backend implementation."""
 
+import argparse
 import asyncio
 import time
 from dataclasses import dataclass
 
 from kilntainers.backends.base import Backend, ExecRequest, ExecResult, Sandbox
-from kilntainers.config import DockerBackendConfig
+from kilntainers.config import BackendConfig, DockerBackendConfig
 from kilntainers.errors import BackendError, SandboxDiedError
 
 DEFAULT_IMAGE = "debian:bookworm-slim"
@@ -37,9 +38,69 @@ class DockerBackend(Backend):
     subprocess calls to the Docker CLI (or compatible engine like podman).
     """
 
+    @classmethod
+    def add_cli_arguments(cls, group: argparse._ArgumentGroup) -> None:
+        """Register Docker-specific CLI arguments."""
+        group.add_argument(
+            "--engine",
+            default="docker",
+            help="Container CLI binary (default: docker). Supports podman.",
+        )
+        group.add_argument(
+            "--image",
+            default="debian:bookworm-slim",
+            help="Docker image (default: debian:bookworm-slim)",
+        )
+        group.add_argument(
+            "--shell",
+            default="/bin/bash",
+            help="Shell binary for command mode (default: /bin/bash)",
+        )
+        group.add_argument(
+            "--network",
+            action="store_true",
+            default=False,
+            help="Enable network access in sandboxes (default: disabled)",
+        )
+        group.add_argument(
+            "--cpu",
+            default=None,
+            help='Docker CPU limit (e.g., "1.5")',
+        )
+        group.add_argument(
+            "--memory",
+            default=None,
+            help='Docker memory limit (e.g., "512m")',
+        )
+        group.add_argument(
+            "--docker-run-flag",
+            action="append",
+            default=None,
+            dest="docker_run_flags",
+            help=(
+                "Additional flag passed to docker run. Repeatable. "
+                '(e.g., --docker-run-flag "--pids-limit=256")'
+            ),
+        )
+
+    @classmethod
+    def config_from_args(cls, args: argparse.Namespace) -> BackendConfig:
+        """Build DockerBackendConfig from parsed CLI arguments."""
+        return DockerBackendConfig(
+            engine=args.engine,
+            image=args.image,
+            shell=args.shell,
+            network_enabled=args.network,
+            cpu=args.cpu,
+            memory=args.memory,
+            docker_run_flags=args.docker_run_flags or [],
+            default_timeout=args.timeout,
+        )
+
     def __init__(self, config: DockerBackendConfig) -> None:
-        super().__init__()
-        self._config = config
+        super().__init__(config)
+        # Override parent's _config with more specific type for type checker
+        self._config: DockerBackendConfig = config
 
     async def _run_docker(
         self,

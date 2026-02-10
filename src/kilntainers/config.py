@@ -7,6 +7,18 @@ Transport = Literal["stdio", "http"]
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
+class BackendConfig:
+    """Base class for all backend configurations.
+
+    Contains fields shared across all backends. Backend-specific
+    config classes inherit from this.
+    """
+
+    # Passed through for tool description generation
+    default_timeout: int = 120
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
 class ServerConfig:
     """Core server configuration from CLI arguments.
 
@@ -32,7 +44,7 @@ class ServerConfig:
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
-class DockerBackendConfig:
+class DockerBackendConfig(BackendConfig):
     """Configuration for the Docker backend.
 
     Populated from CLI args by the startup layer. Consumed by
@@ -46,6 +58,3 @@ class DockerBackendConfig:
     cpu: str | None = None
     memory: str | None = None
     docker_run_flags: list[str] = field(default_factory=list)
-
-    # Passed through for tool description generation
-    default_timeout: int = 120

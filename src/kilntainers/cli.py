@@ -5,9 +5,9 @@ import asyncio
 import sys
 from typing import NoReturn
 
-from kilntainers.backends import get_backend_class
+from kilntainers.backends import BACKEND_REGISTRY, get_backend_class
 from kilntainers.backends.base import Backend
-from kilntainers.config import DockerBackendConfig, ServerConfig
+from kilntainers.config import BackendConfig, ServerConfig
 from kilntainers.errors import BackendError
 from kilntainers.server import create_server
 
@@ -34,7 +34,7 @@ def build_parser() -> argparse.ArgumentParser:
     core.add_argument(
         "--backend",
         default="docker",
-        choices=["docker"],
+        choices=list(BACKEND_REGISTRY.keys()),
         help="Backend to use (default: docker)",
     )
     core.add_argument(
@@ -86,66 +86,28 @@ def build_parser() -> argparse.ArgumentParser:
         help="Append to the backend's default tool description",
     )
 
-    # --- Docker backend parameters ---
-    docker = parser.add_argument_group("docker backend options")
-    docker.add_argument(
-        "--engine",
-        default="docker",
-        help="Container CLI binary (default: docker). Supports podman.",
-    )
-    docker.add_argument(
-        "--image",
-        default="debian:bookworm-slim",
-        help="Docker image (default: debian:bookworm-slim)",
-    )
-    docker.add_argument(
-        "--shell",
-        default="/bin/bash",
-        help="Shell binary for command mode (default: /bin/bash)",
-    )
-    docker.add_argument(
-        "--network",
-        action="store_true",
-        default=False,
-        help="Enable network access in sandboxes (default: disabled)",
-    )
-    docker.add_argument(
-        "--cpu",
-        default=None,
-        help='Docker CPU limit (e.g., "1.5")',
-    )
-    docker.add_argument(
-        "--memory",
-        default=None,
-        help='Docker memory limit (e.g., "512m")',
-    )
-    docker.add_argument(
-        "--docker-run-flag",
-        action="append",
-        default=None,
-        dest="docker_run_flags",
-        help=(
-            "Additional flag passed to docker run. Repeatable. "
-            '(e.g., --docker-run-flag "--pids-limit=256")'
-        ),
-    )
+    # --- Backend-specific parameters (delegated to each backend) ---
+    for name, backend_cls in BACKEND_REGISTRY.items():
+        group = parser.add_argument_group(f"{name} backend options")
+        backend_cls.add_cli_arguments(group)
 
     return parser
 
 
 def build_configs(
     args: argparse.Namespace,
-) -> tuple[ServerConfig, DockerBackendConfig]:
+) -> tuple[ServerConfig, BackendConfig]:
     """Build config dataclasses from parsed arguments.
 
     This function maps flat CLI arguments to the typed config objects
-    consumed by the server and backend layers.
+    consumed by the server and backend layers. Server config is built
+    here; backend config is delegated to the backend class.
 
     Args:
         args: Parsed command-line arguments from argparse.
 
     Returns:
-        A tuple of (ServerConfig, DockerBackendConfig).
+        A tuple of (ServerConfig, BackendConfig).
     """
     # Handle HTTP-only args that may be _UNSET
     host = "127.0.0.1" if args.host is _UNSET else args.host
@@ -163,18 +125,11 @@ def build_configs(
         session_timeout=session_timeout,
     )
 
-    docker_config = DockerBackendConfig(
-        engine=args.engine,
-        image=args.image,
-        shell=args.shell,
-        network_enabled=args.network,
-        cpu=args.cpu,
-        memory=args.memory,
-        docker_run_flags=args.docker_run_flags or [],
-        default_timeout=args.timeout,
-    )
+    # Delegate backend config construction to the backend class
+    backend_cls = get_backend_class(args.backend)
+    backend_config = backend_cls.config_from_args(args)
 
-    return server_config, docker_config
+    return server_config, backend_config
 
 
 def _startup_error(message: str) -> NoReturn:
@@ -193,11 +148,7 @@ def _startup_error(message: str) -> NoReturn:
     sys.exit(1)
 
 
-def validate_config(
-    server_config: ServerConfig,
-    docker_config: DockerBackendConfig,
-    _parsed_args: argparse.Namespace | None = None,
-) -> None:
+def validate_config(server_config: ServerConfig) -> None:
     """Validate configuration constraints that span multiple parameters.
 
     Raises SystemExit with a descriptive message on failure.
@@ -206,12 +157,6 @@ def validate_config(
 
     Args:
         server_config: The server configuration to validate.
-        docker_config: The Docker backend configuration (unused in v1 validation,
-            but accepted for interface consistency).
-        _parsed_args: The parsed arguments for detecting HTTP-only args.
-            Internal parameter for testing - normally None, which means
-            the function uses the server_config values to detect explicit
-            HTTP-only argument setting.
 
     Raises:
         SystemExit: If validation fails, with code 1 and an error message.
@@ -261,7 +206,7 @@ def validate_config(
 
 async def _async_main(
     server_config: ServerConfig,
-    docker_config: DockerBackendConfig,
+    backend_config: BackendConfig,
 ) -> None:
     """Async startup: validate backend, build server, run.
 
@@ -272,14 +217,14 @@ async def _async_main(
 
     Args:
         server_config: Server configuration.
-        docker_config: Docker backend configuration.
+        backend_config: Backend configuration.
 
     Raises:
         SystemExit: If backend validation or server creation fails.
     """
     # Create and validate backend
     backend_class = get_backend_class("docker")  # Only docker in v1
-    backend = backend_class(docker_config)
+    backend = backend_class(backend_config)
     try:
         await backend.validate()
     except BackendError as e:
@@ -324,7 +269,7 @@ def main() -> None:
     args = parser.parse_args()
 
     server_config, docker_config = build_configs(args)
-    validate_config(server_config, docker_config)
+    validate_config(server_config)
 
     # Create and validate backend (async, run in its own event loop)
     backend_class = get_backend_class("docker")  # Only docker in v1

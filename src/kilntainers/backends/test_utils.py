@@ -4,9 +4,11 @@ These mocks are designed for Phase 4 (MCP server) tests, allowing
 testing of the server layer without requiring a real backend like Docker.
 """
 
+import argparse
 import asyncio
 
 from kilntainers.backends.base import Backend, ExecRequest, ExecResult, Sandbox
+from kilntainers.config import BackendConfig
 from kilntainers.errors import SandboxDiedError
 
 
@@ -82,8 +84,18 @@ class MockBackend(Backend):
     backend like Docker.
     """
 
+    @classmethod
+    def add_cli_arguments(cls, group: argparse._ArgumentGroup) -> None:
+        """Mock implementation - does nothing."""
+
+    @classmethod
+    def config_from_args(cls, args: argparse.Namespace) -> BackendConfig:
+        """Mock implementation - returns default config."""
+        return BackendConfig()
+
     def __init__(
         self,
+        config: BackendConfig,
         *,
         tool_instructions: str | None = "mock instructions",
         sandbox_id: str = "mock-sandbox-001",
@@ -92,11 +104,12 @@ class MockBackend(Backend):
         """Initialize a mock backend.
 
         Args:
+            config: The backend configuration.
             tool_instructions: The tool instructions to return.
             sandbox_id: The sandbox ID to use for created sandboxes.
             exec_results: Results queue for created sandboxes.
         """
-        super().__init__()
+        super().__init__(config)
         self._tool_instructions = tool_instructions
         self._sandbox_id = sandbox_id
         self._exec_results = exec_results

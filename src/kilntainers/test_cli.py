@@ -1,5 +1,6 @@
 """Tests for CLI argument parsing, config construction, and validation."""
 
+from typing import cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -224,6 +225,7 @@ def test_build_configs_custom_args():
     )
 
     server_config, docker_config = build_configs(args)
+    docker_config = cast(DockerBackendConfig, docker_config)
 
     # Server config
     assert server_config.transport == "http"
@@ -250,6 +252,7 @@ def test_build_configs_timeout_in_both_configs():
     args = parser.parse_args(["--timeout", "300"])
 
     server_config, docker_config = build_configs(args)
+    docker_config = cast(DockerBackendConfig, docker_config)
 
     assert server_config.default_timeout == 300
     assert docker_config.default_timeout == 300
@@ -261,6 +264,7 @@ def test_build_configs_docker_run_flags_not_provided():
     args = parser.parse_args([])
 
     _server_config, docker_config = build_configs(args)
+    docker_config = cast(DockerBackendConfig, docker_config)
 
     assert docker_config.docker_run_flags == []
 
@@ -271,6 +275,7 @@ def test_build_configs_network_flag():
     args = parser.parse_args(["--network"])
 
     _server_config, docker_config = build_configs(args)
+    docker_config = cast(DockerBackendConfig, docker_config)
 
     assert docker_config.network_enabled is True
 
@@ -284,10 +289,10 @@ def test_validate_config_stdio_mode_with_host():
     """Test that --host in stdio mode causes startup error."""
     parser = build_parser()
     args = parser.parse_args(["--host", "0.0.0.0"])
-    server_config, docker_config = build_configs(args)
+    server_config, _docker_config = build_configs(args)
 
     with pytest.raises(SystemExit) as exc_info:
-        validate_config(server_config, docker_config)
+        validate_config(server_config)
 
     assert exc_info.value.code == 1
 
@@ -296,10 +301,10 @@ def test_validate_config_stdio_mode_with_port():
     """Test that --port in stdio mode causes startup error."""
     parser = build_parser()
     args = parser.parse_args(["--port", "9090"])
-    server_config, docker_config = build_configs(args)
+    server_config, _docker_config = build_configs(args)
 
     with pytest.raises(SystemExit) as exc_info:
-        validate_config(server_config, docker_config)
+        validate_config(server_config)
 
     assert exc_info.value.code == 1
 
@@ -308,10 +313,10 @@ def test_validate_config_stdio_mode_with_session_timeout():
     """Test that --session-timeout in stdio mode causes startup error."""
     parser = build_parser()
     args = parser.parse_args(["--session-timeout", "600"])
-    server_config, docker_config = build_configs(args)
+    server_config, _docker_config = build_configs(args)
 
     with pytest.raises(SystemExit) as exc_info:
-        validate_config(server_config, docker_config)
+        validate_config(server_config)
 
     assert exc_info.value.code == 1
 
@@ -322,10 +327,10 @@ def test_validate_config_http_mode_no_error():
     args = parser.parse_args(
         ["--transport", "http", "--host", "0.0.0.0", "--port", "9090"]
     )
-    server_config, docker_config = build_configs(args)
+    server_config, _docker_config = build_configs(args)
 
     # Should not raise
-    validate_config(server_config, docker_config)
+    validate_config(server_config)
 
 
 def test_validate_config_both_tool_description_params():
@@ -339,10 +344,10 @@ def test_validate_config_both_tool_description_params():
             "extra",
         ]
     )
-    server_config, docker_config = build_configs(args)
+    server_config, _docker_config = build_configs(args)
 
     with pytest.raises(SystemExit) as exc_info:
-        validate_config(server_config, docker_config)
+        validate_config(server_config)
 
     assert exc_info.value.code == 1
 
@@ -351,40 +356,40 @@ def test_validate_config_override_only():
     """Test that only override is allowed."""
     parser = build_parser()
     args = parser.parse_args(["--tool-instruction-override", "custom"])
-    server_config, docker_config = build_configs(args)
+    server_config, _docker_config = build_configs(args)
 
     # Should not raise
-    validate_config(server_config, docker_config)
+    validate_config(server_config)
 
 
 def test_validate_config_extended_only():
     """Test that only extended is allowed."""
     parser = build_parser()
     args = parser.parse_args(["--extended-tool-instruction", "extra"])
-    server_config, docker_config = build_configs(args)
+    server_config, _docker_config = build_configs(args)
 
     # Should not raise
-    validate_config(server_config, docker_config)
+    validate_config(server_config)
 
 
 def test_validate_config_neither_tool_description():
     """Test that neither tool description param is allowed."""
     parser = build_parser()
     args = parser.parse_args([])
-    server_config, docker_config = build_configs(args)
+    server_config, _docker_config = build_configs(args)
 
     # Should not raise
-    validate_config(server_config, docker_config)
+    validate_config(server_config)
 
 
 def test_validate_config_timeout_zero():
     """Test that timeout=0 causes startup error."""
     parser = build_parser()
     args = parser.parse_args(["--timeout", "0"])
-    server_config, docker_config = build_configs(args)
+    server_config, _docker_config = build_configs(args)
 
     with pytest.raises(SystemExit) as exc_info:
-        validate_config(server_config, docker_config)
+        validate_config(server_config)
 
     assert exc_info.value.code == 1
 
@@ -393,10 +398,10 @@ def test_validate_config_timeout_negative():
     """Test that negative timeout causes startup error."""
     parser = build_parser()
     args = parser.parse_args(["--timeout", "-1"])
-    server_config, docker_config = build_configs(args)
+    server_config, _docker_config = build_configs(args)
 
     with pytest.raises(SystemExit) as exc_info:
-        validate_config(server_config, docker_config)
+        validate_config(server_config)
 
     assert exc_info.value.code == 1
 
@@ -405,20 +410,20 @@ def test_validate_config_timeout_minimum_valid():
     """Test that timeout=1 is valid (minimum)."""
     parser = build_parser()
     args = parser.parse_args(["--timeout", "1"])
-    server_config, docker_config = build_configs(args)
+    server_config, _docker_config = build_configs(args)
 
     # Should not raise
-    validate_config(server_config, docker_config)
+    validate_config(server_config)
 
 
 def test_validate_config_output_limit_zero():
     """Test that output_limit=0 causes startup error."""
     parser = build_parser()
     args = parser.parse_args(["--output-limit", "0"])
-    server_config, docker_config = build_configs(args)
+    server_config, _docker_config = build_configs(args)
 
     with pytest.raises(SystemExit) as exc_info:
-        validate_config(server_config, docker_config)
+        validate_config(server_config)
 
     assert exc_info.value.code == 1
 
@@ -427,10 +432,10 @@ def test_validate_config_output_limit_minimum_valid():
     """Test that output_limit=1 is valid (minimum)."""
     parser = build_parser()
     args = parser.parse_args(["--output-limit", "1"])
-    server_config, docker_config = build_configs(args)
+    server_config, _docker_config = build_configs(args)
 
     # Should not raise
-    validate_config(server_config, docker_config)
+    validate_config(server_config)
 
 
 # ================
