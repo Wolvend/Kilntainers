@@ -7,7 +7,7 @@ actions:
     command: "uv run ./checks.sh"
 
   - name: "all_python_tests"
-    description: "Run all python tests in the project (skips paid tests by default, skips slow docker integration tests, parallelized)"
+    description: "Run all python tests in the project (but skips slow docker integration tests)"
     command: "uv run python -m pytest --benchmark-quiet -q -m 'not docker_integration' -n auto ."
 
   - name: "all_python_tests_including_paid"
@@ -15,7 +15,7 @@ actions:
     command: "uv run python -m pytest --benchmark-quiet -q --runpaid ."
 
   - name: "docker_integration_tests"
-    description: "Run only docker integration tests (requires Docker daemon, slow, parallelized)"
+    description: "Run only docker integration tests (requires Docker daemon, Podman daemon, slow). Only run this if changing docker integration tests or docker backend code."
     command: "uv run python -m pytest --benchmark-quiet -v -m docker_integration -n auto ."
 
   - name: "lint_python"

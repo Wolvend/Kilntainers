@@ -48,7 +48,7 @@ class ServerConfig:
     # Transport
     transport: str = "stdio"          # "stdio" or "http"
     host: str = "127.0.0.1"          # HTTP bind address
-    port: int = 8080                  # HTTP listen port
+    port: int = 8435                  # HTTP listen port
 
     # Exec defaults
     default_timeout: int = 120        # seconds
@@ -143,8 +143,8 @@ def build_parser() -> argparse.ArgumentParser:
     core.add_argument(
         "--port",
         type=int,
-        default=8080,
-        help="HTTP listen port (default: 8080, HTTP mode only)",
+        default=8435,
+        help="HTTP listen port (default: 8435, HTTP mode only)",
     )
     core.add_argument(
         "--timeout",
@@ -308,7 +308,7 @@ def validate_config(
                 "--host is only valid with --transport http. "
                 "In stdio mode, there is no HTTP server to bind."
             )
-        if server_config.port != 8080:
+        if server_config.port != 8435:
             _startup_error(
                 "--port is only valid with --transport http. "
                 "In stdio mode, there is no HTTP server to bind."
@@ -597,7 +597,7 @@ core options:
   --transport {stdio,http}
                         MCP transport (default: stdio)
   --host HOST           HTTP bind address (default: 127.0.0.1, HTTP mode only)
-  --port PORT           HTTP listen port (default: 8080, HTTP mode only)
+  --port PORT           HTTP listen port (default: 8435, HTTP mode only)
   --timeout TIMEOUT     Default exec timeout in seconds (default: 120)
   --output-limit OUTPUT_LIMIT
                         Max combined stdout+stderr bytes per exec

@@ -81,20 +81,20 @@ Implement the MCP server using the official `mcp` SDK with FastMCP. Register the
 
 ---
 
-## Phase 5: CLI & Startup
+## Phase 5: CLI & Startup ✅
 
 Implement argument parsing, startup validation, and the main entry point. Wire everything together so `kilntainers` runs as a stdio MCP server.
 
 **What to build:**
 
-- [ ] `cli.py` — `build_parser()` with argument groups (core options, tool description, docker backend options). Include HTTP args in parser for `--help` completeness, but they will error in validation since only stdio is supported in this milestone.
-- [ ] `cli.py` — `build_configs()` mapping argparse namespace to `ServerConfig` + `DockerBackendConfig`
-- [ ] `cli.py` — `validate_config()` for cross-cutting constraints (HTTP-only args in stdio mode, mutual exclusivity of tool description params, value ranges)
-- [ ] `cli.py` — `main()` (sync entry point), `_async_main()` (backend creation, validation, server creation, `mcp.run(transport="stdio")`)
-- [ ] `cli.py` — `_startup_error()` for stderr error reporting with `kilntainers: error:` prefix
-- [ ] `__main__.py` — wire to `cli.main()`
-- [ ] Update `pyproject.toml` — `[project.scripts] kilntainers = "kilntainers.cli:main"`
-- [ ] Unit tests (`test_cli.py`): parser defaults, custom args, config construction, validation (HTTP-only args in stdio, mutual exclusivity, value ranges), startup flow with mock backend
+- [x] `cli.py` — `build_parser()` with argument groups (core options, tool description, docker backend options). Include HTTP args in parser for `--help` completeness, but they will error in validation since only stdio is supported in this milestone.
+- [x] `cli.py` — `build_configs()` mapping argparse namespace to `ServerConfig` + `DockerBackendConfig`
+- [x] `cli.py` — `validate_config()` for cross-cutting constraints (HTTP-only args in stdio mode, mutual exclusivity of tool description params, value ranges)
+- [x] `cli.py` — `main()` (sync entry point), `_async_main()` (backend creation, validation, server creation, `mcp.run(transport="stdio")`)
+- [x] `cli.py` — `_startup_error()` for stderr error reporting with `kilntainers: error:` prefix
+- [x] `__main__.py` — wire to `cli.main()` (already done in Phase 1)
+- [x] Update `pyproject.toml` — `[project.scripts] kilntainers = "kilntainers.cli:main"` (already done in Phase 1)
+- [x] Unit tests (`test_cli.py`): parser defaults, custom args, config construction, validation (HTTP-only args in stdio, mutual exclusivity, value ranges), startup flow with mock backend
 
 **Architecture reference:** [cli_and_startup.md](architecture/cli_and_startup.md) §1–§10
 

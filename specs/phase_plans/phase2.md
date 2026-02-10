@@ -144,7 +144,7 @@ Implement frozen dataclasses for server and backend configuration.
 - Fields:
   - `transport: str = "stdio"`
   - `host: str = "127.0.0.1"`
-  - `port: int = 8080`
+  - `port: int = 8435`
   - `default_timeout: int = 120`
   - `output_limit: int = 2_097_152`
   - `tool_instruction_override: str | None = None`

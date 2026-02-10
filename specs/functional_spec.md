@@ -157,7 +157,7 @@ Kilntainers is configured through CLI parameters at startup. One server instance
 | `--backend` | string | `docker` | Backend to use. V1: `docker` only. |
 | `--transport` | string | `stdio` | MCP transport: `stdio` or `http`. |
 | `--host` | string | `127.0.0.1` | HTTP bind address (HTTP mode only). |
-| `--port` | integer | `8080` | HTTP listen port (HTTP mode only). |
+| `--port` | integer | `8435` | HTTP listen port (HTTP mode only). |
 | `--network` | flag | disabled | Enable network access in sandboxes. (D5) |
 | `--timeout` | integer (sec) | `120` | Default exec timeout. (D25) |
 | `--output-limit` | integer (bytes) | `2097152` | Max combined stdout+stderr per exec. (D24) |

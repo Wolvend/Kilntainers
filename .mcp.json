@@ -7,6 +7,12 @@
         "hooks-mcp"
       ],
       "env": {}
+    },
+    "kilntainers": {
+      "type": "stdio",
+      "command": "kilntainers",
+      "args": [],
+      "env": {}
     }
   }
 }
