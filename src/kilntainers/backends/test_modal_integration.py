@@ -90,7 +90,7 @@ class TestConnection:
         # Should not raise
         await backend.validate()
 
-    @pytest.mark.modal_integration
+    @pytest.mark.integration
     @pytest.mark.asyncio
     @skip_without_modal
     async def test_invalid_token_fails(self):
@@ -145,7 +145,7 @@ class TestConnection:
 class TestModalLifecycle:
     """Tests for Modal-specific sandbox lifecycle operations."""
 
-    @pytest.mark.modal_integration
+    @pytest.mark.integration
     @pytest.mark.asyncio
     @skip_without_modal
     async def test_create_sandbox_type(self, modal_backend):
@@ -163,7 +163,7 @@ class TestModalLifecycle:
 class TestTimeout:
     """Tests for timeout enforcement."""
 
-    @pytest.mark.modal_integration
+    @pytest.mark.integration
     @pytest.mark.asyncio
     @skip_without_modal
     async def test_timeout_exceeded(self, sandbox):
@@ -182,7 +182,7 @@ class TestTimeout:
 class TestNetworkIsolation:
     """Tests for network isolation behavior."""
 
-    @pytest.mark.modal_integration
+    @pytest.mark.integration
     @pytest.mark.asyncio
     @skip_without_modal
     async def test_network_disabled_by_default(self, sandbox):
@@ -197,7 +197,7 @@ class TestNetworkIsolation:
         # Should fail because network is disabled
         assert result.exit_code != 0
 
-    @pytest.mark.modal_integration
+    @pytest.mark.integration
     @pytest.mark.asyncio
     @skip_without_modal
     async def test_network_enabled_works(self):
@@ -229,7 +229,7 @@ class TestNetworkIsolation:
 class TestExecLock:
     """Tests for exec serialization via lock."""
 
-    @pytest.mark.modal_integration
+    @pytest.mark.integration
     @pytest.mark.asyncio
     @skip_without_modal
     async def test_concurrent_execs_are_serialized(self, sandbox):
@@ -258,7 +258,7 @@ class TestExecLock:
 class TestDeathDetection:
     """Tests for unexpected sandbox death detection."""
 
-    @pytest.mark.modal_integration
+    @pytest.mark.integration
     @pytest.mark.asyncio
     @skip_without_modal
     async def test_wait_for_death_blocks_on_normal_stop(self, sandbox):
@@ -280,7 +280,7 @@ class TestDeathDetection:
         except asyncio.CancelledError:
             pass  # Expected
 
-    @pytest.mark.modal_integration
+    @pytest.mark.integration
     @pytest.mark.asyncio
     @skip_without_modal
     async def test_exec_after_stop_raises_error(self, sandbox):
@@ -300,7 +300,7 @@ class TestDeathDetection:
 class TestToolInstructions:
     """Tests for tool_instructions method."""
 
-    @pytest.mark.modal_integration
+    @pytest.mark.integration
     @pytest.mark.asyncio
     @skip_without_modal
     async def test_tool_instructions_default_image(self):
@@ -313,7 +313,7 @@ class TestToolInstructions:
         assert "bash" in instructions
         assert "120" in instructions  # default timeout
 
-    @pytest.mark.modal_integration
+    @pytest.mark.integration
     @pytest.mark.asyncio
     @skip_without_modal
     async def test_tool_instructions_custom_image(self):
@@ -332,7 +332,7 @@ class TestToolInstructions:
 class TestCustomShell:
     """Tests for custom shell configuration."""
 
-    @pytest.mark.modal_integration
+    @pytest.mark.integration
     @pytest.mark.asyncio
     @skip_without_modal
     async def test_custom_sh_shell(self):

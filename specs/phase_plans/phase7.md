@@ -86,7 +86,7 @@ Create comprehensive unit tests with mock Modal SDK:
 - `TestModalSandboxDeathDetection` — unexpected exit, stop requested, cancellation
 - `TestModalSandboxSandboxId` — returns object_id
 
-**Note:** Integration tests (real Modal API) are optional and would be marked `@pytest.mark.modal_integration`.
+**Note:** Integration tests (real Modal API) are optional and would be marked `@pytest.mark.integration`.
 
 ### Step 8: pytest Marker
 **File:** `pyproject.toml`

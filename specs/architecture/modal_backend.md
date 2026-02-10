@@ -928,7 +928,7 @@ def _modal_auth_available() -> bool:
 - Default: `command="curl -s http://example.com"` → fails.
 - With `--network`: outbound connections succeed.
 
-**Cost note:** Integration tests create real Modal sandboxes and incur costs. They should be tagged separately (e.g., `@pytest.mark.modal_integration`) and run only in CI or when explicitly requested.
+**Cost note:** Integration tests create real Modal sandboxes and incur costs. They should be tagged separately (e.g., `@pytest.mark.integration`) and run only in CI or when explicitly requested.
 
 ---
 
