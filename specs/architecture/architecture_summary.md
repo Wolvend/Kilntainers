@@ -30,6 +30,10 @@ Argument parsing with `argparse` (no third-party CLI libraries), the `ServerConf
 
 How stdio and Streamable HTTP transports map to sandbox lifecycles: stdio runs one sandbox for the process lifetime, HTTP runs one per `Mcp-Session-Id` session. Covers session creation and request routing, idle session timeout (`--session-timeout`) and its SDK integration, the one-sandbox-per-session ownership model, sandbox death propagation (SIGTERM self-signal for stdio, request-time detection for HTTP), graceful shutdown orchestration (cancel death task → stop sandbox), force-kill timeouts, and edge cases (concurrent death and exec, rapid reconnection, SIGTERM during creation).
 
+### [Modal Backend Implementation](modal_backend.md)
+
+How the Modal backend implements the abstraction layer using the Modal Python SDK: token-based authentication, `modal.Image` construction (debian_slim default, `from_registry` for custom images), sandbox creation with resource configuration (CPU, memory, GPU, region), readiness verification, command execution with server-side timeout enforcement and client-side output limit monitoring via `asyncio.TaskGroup`, stdin piping through Modal's `StreamWriter`, sandbox death detection (`sb.wait.aio()`), stop via `terminate()`, network isolation (`block_network`), sandbox lifetime management, and the optional dependency pattern for the `modal` package.
+
 ### [Phase 7: Error Handling & Observability](error_handling.md)
 
 The complete error handling architecture: exception hierarchy (`KilntainersError` → `BackendError` / `SandboxDiedError`), the ExecResult-vs-exception boundary (limit conditions are results, not errors), startup error propagation (stderr + exit codes), runtime error propagation (input validation → `isError: true`, exec results → `isError: false`, sandbox death → `isError: true` + connection drop), unexpected exception catch-all, stderr usage patterns, the "great errors, no logs" observability strategy (D31), error message quality guidelines for both operators and LLM agents, and Docker backend error handling details.

@@ -2,10 +2,12 @@
 
 from kilntainers.backends.base import Backend
 from kilntainers.backends.docker import DockerBackend
+from kilntainers.backends.modal import ModalBackend
 
 # Maps --backend CLI values to backend classes
 BACKEND_REGISTRY: dict[str, type[Backend]] = {
     "docker": DockerBackend,
+    "modal": ModalBackend,
 }
 
 

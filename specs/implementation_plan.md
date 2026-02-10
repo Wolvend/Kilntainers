@@ -118,7 +118,14 @@ Verify the full pipeline works end-to-end: CLI → startup → FastMCP → tool 
 
 ---
 
-## Phase 7 (FUTURE): Streamable HTTP Transport
+## Phase 7: Modal Backend
+
+- [ ] Implement `spec/architecture/modal_backend.md`
+
+
+---
+
+## Phase 8 (FUTURE): Streamable HTTP Transport
 
 Add Streamable HTTP support with per-session sandbox management. Deferred until stdio is fully working and tested.
 
