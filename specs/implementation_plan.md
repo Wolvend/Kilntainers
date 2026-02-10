@@ -100,17 +100,17 @@ Implement argument parsing, startup validation, and the main entry point. Wire e
 
 ---
 
-## Phase 6: End-to-End stdio & Integration Testing
+## Phase 6: End-to-End stdio & Integration Testing ✅
 
 Verify the full pipeline works end-to-end: CLI → startup → FastMCP → tool call → Docker backend → response. Add integration tests and polish.
 
 **What to build:**
 
-- [ ] Verify end-to-end: install the package, run `kilntainers` as an MCP server, connect a client, execute commands, receive responses
-- [ ] Stdio lifecycle integration tests: full session (start → exec → stop), sandbox creation failure handling, graceful shutdown (stdin EOF, SIGTERM)
-- [ ] Death propagation integration test: kill container externally, verify server exits
-- [ ] CI configuration: ensure `build_and_test.yml` runs unit tests (no Docker) and integration tests (with Docker on ubuntu-latest) as separate steps
-- [ ] Polish: verify `--help` output, test with a real MCP client (e.g. Claude Desktop or similar), fix any rough edges
+- [x] Verify end-to-end: install the package, run `kilntainers` as an MCP server, connect a client, execute commands, receive responses
+- [x] Stdio lifecycle integration tests: full session (start → exec → stop), sandbox creation failure handling, graceful shutdown (stdin EOF, SIGTERM)
+- [x] Death propagation integration test: kill container externally, verify server exits
+- [x] CI configuration: ensure `build_and_test.yml` runs unit tests (no Docker) and integration tests (with Docker on ubuntu-latest) as separate steps
+- [x] Polish: verify `--help` output, test with a real MCP client (e.g. Claude Desktop or similar), fix any rough edges
 
 **Architecture references:**
 - [connection_lifecycle.md](architecture/connection_lifecycle.md) §2 (stdio lifecycle), §6 (death propagation), §7 (graceful shutdown)

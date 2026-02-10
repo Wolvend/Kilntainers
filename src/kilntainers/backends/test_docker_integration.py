@@ -502,7 +502,7 @@ class TestToolInstructions:
 
     @pytest.mark.docker_integration
     @pytest.mark.asyncio
-    async def test_tool_instructions_custom_image(self, engine):
+    async def test_tool_instructions_custom_image(self, engine, docker_backend):
         """Custom image returns None for tool instructions."""
         config = DockerBackendConfig(engine=engine, image="alpine:latest")
         backend = DockerBackend(config)
