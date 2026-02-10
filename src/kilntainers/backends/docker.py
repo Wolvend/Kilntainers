@@ -21,6 +21,7 @@ class DockerBackendConfig(BackendConfig):
     """
 
     engine: str = "docker"
+    host: str | None = None
     image: str = "debian:bookworm-slim"
     shell: str = "/bin/bash"
     network_enabled: bool = False
@@ -44,6 +45,7 @@ class _DockerSandboxState:
     """
 
     engine: str
+    host: str | None
     shell: str
     container_id: str
 
@@ -62,6 +64,15 @@ class DockerBackend(Backend):
             "--engine",
             default="docker",
             help="Container CLI binary (default: docker). Supports podman.",
+        )
+        group.add_argument(
+            "--docker-host",
+            default=None,
+            dest="docker_host",
+            help=(
+                "Docker daemon socket/address, passed as -H to the Docker CLI "
+                '(e.g., "ssh://user@remote-host", "tcp://host:2375")'
+            ),
         )
         group.add_argument(
             "--image",
@@ -105,6 +116,7 @@ class DockerBackend(Backend):
         """Build DockerBackendConfig from parsed CLI arguments."""
         return DockerBackendConfig(
             engine=args.engine,
+            host=args.docker_host,
             image=args.image,
             shell=args.shell,
             network_enabled=args.network,
@@ -118,6 +130,14 @@ class DockerBackend(Backend):
         super().__init__(config)
         # Override parent's _config with more specific type for type checker
         self._config: DockerBackendConfig = config
+
+    @property
+    def _engine_prefix(self) -> list[str]:
+        """Return the base engine command, including -H if a host is configured."""
+        prefix = [self._config.engine]
+        if self._config.host is not None:
+            prefix.extend(["-H", self._config.host])
+        return prefix
 
     async def _run_docker(
         self,
@@ -141,7 +161,7 @@ class DockerBackend(Backend):
             BackendError: If check=True and the command exits non-zero,
                 or if the command times out.
         """
-        cmd = [self._config.engine, *args]
+        cmd = [*self._engine_prefix, *args]
         proc = await asyncio.create_subprocess_exec(
             *cmd,
             stdin=asyncio.subprocess.PIPE if stdin_data else asyncio.subprocess.DEVNULL,
@@ -199,7 +219,7 @@ class DockerBackend(Backend):
         # Don't use _run_docker because we want stderr to pass through
         # to the parent process (for progress display to the user)
         proc = await asyncio.create_subprocess_exec(
-            self._config.engine,
+            *self._engine_prefix,
             "pull",
             self._config.image,
             stdout=asyncio.subprocess.DEVNULL,
@@ -264,6 +284,7 @@ class DockerBackend(Backend):
         # 4. Create sandbox state
         state = _DockerSandboxState(
             engine=self._config.engine,
+            host=self._config.host,
             shell=self._config.shell,
             container_id=container_id,
         )
@@ -316,11 +337,20 @@ class DockerSandbox(Sandbox):
 
     def __init__(self, state: _DockerSandboxState) -> None:
         self._engine = state.engine
+        self._host = state.host
         self._shell = state.shell
         self._container_id = state.container_id
         self._stopped = False
         self._stop_requested = False
         self._exec_lock = asyncio.Lock()
+
+    @property
+    def _engine_prefix(self) -> list[str]:
+        """Return the base engine command, including -H if a host is configured."""
+        prefix = [self._engine]
+        if self._host is not None:
+            prefix.extend(["-H", self._host])
+        return prefix
 
     @property
     def sandbox_id(self) -> str:
@@ -338,7 +368,7 @@ class DockerSandbox(Sandbox):
 
         Shared helper method for Docker CLI calls within the sandbox.
         """
-        cmd = [self._engine, *args]
+        cmd = [*self._engine_prefix, *args]
         proc = await asyncio.create_subprocess_exec(
             *cmd,
             stdin=asyncio.subprocess.PIPE if stdin_data else asyncio.subprocess.DEVNULL,
@@ -384,7 +414,7 @@ class DockerSandbox(Sandbox):
 
     def _build_exec_command(self, request: ExecRequest) -> list[str]:
         """Build the docker exec argument list."""
-        cmd = [self._engine, "exec"]
+        cmd = [*self._engine_prefix, "exec"]
 
         # -i keeps stdin open (needed when piping stdin data)
         if request.stdin is not None:
@@ -573,7 +603,7 @@ class DockerSandbox(Sandbox):
         try:
             # docker stop sends SIGTERM, waits grace period, then SIGKILL
             proc = await asyncio.create_subprocess_exec(
-                self._engine,
+                *self._engine_prefix,
                 "stop",
                 "-t",
                 "5",
@@ -599,7 +629,7 @@ class DockerSandbox(Sandbox):
         case, blocks until cancelled by the MCP layer.
         """
         proc = await asyncio.create_subprocess_exec(
-            self._engine,
+            *self._engine_prefix,
             "wait",
             self._container_id,
             stdout=asyncio.subprocess.DEVNULL,

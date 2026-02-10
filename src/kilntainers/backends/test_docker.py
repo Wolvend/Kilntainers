@@ -299,6 +299,122 @@ class TestDockerBackendToolInstructions:
         assert instructions is None
 
 
+class TestDockerBackendEnginePrefix:
+    """Tests for DockerBackend._engine_prefix property."""
+
+    def test_engine_prefix_no_host(self, default_config):
+        """No host returns engine only."""
+        backend = DockerBackend(default_config)
+        assert backend._engine_prefix == ["docker"]
+
+    def test_engine_prefix_with_host(self):
+        """Host adds -H flag to prefix."""
+        config = DockerBackendConfig(host="tcp://remote:2375")
+        backend = DockerBackend(config)
+        assert backend._engine_prefix == ["docker", "-H", "tcp://remote:2375"]
+
+    def test_engine_prefix_with_custom_engine_and_host(self):
+        """Custom engine and host both appear in prefix."""
+        config = DockerBackendConfig(engine="podman", host="unix:///custom.sock")
+        backend = DockerBackend(config)
+        assert backend._engine_prefix == ["podman", "-H", "unix:///custom.sock"]
+
+    @pytest.mark.asyncio
+    async def test_run_docker_includes_host(self, monkeypatch):
+        """_run_docker passes -H to subprocess when host is configured."""
+        captured_args: list[tuple] = []
+
+        async def create_mock(*args, **kwargs):
+            captured_args.append(args)
+            return MockProcess(0, stdout=b"ok\n")
+
+        monkeypatch.setattr(asyncio, "create_subprocess_exec", create_mock)
+
+        config = DockerBackendConfig(host="tcp://remote:2375")
+        backend = DockerBackend(config)
+        await backend._run_docker("info")
+
+        assert len(captured_args) == 1
+        cmd = captured_args[0]
+        assert cmd[0] == "docker"
+        assert cmd[1] == "-H"
+        assert cmd[2] == "tcp://remote:2375"
+        assert cmd[3] == "info"
+
+    @pytest.mark.asyncio
+    async def test_run_docker_no_host(self, monkeypatch, default_config):
+        """_run_docker omits -H when no host is configured."""
+        captured_args: list[tuple] = []
+
+        async def create_mock(*args, **kwargs):
+            captured_args.append(args)
+            return MockProcess(0, stdout=b"ok\n")
+
+        monkeypatch.setattr(asyncio, "create_subprocess_exec", create_mock)
+
+        backend = DockerBackend(default_config)
+        await backend._run_docker("info")
+
+        assert len(captured_args) == 1
+        cmd = captured_args[0]
+        assert cmd[0] == "docker"
+        assert cmd[1] == "info"
+        assert "-H" not in cmd
+
+
+class TestDockerSandboxEnginePrefix:
+    """Tests for DockerSandbox._engine_prefix property."""
+
+    def test_engine_prefix_no_host(self):
+        """No host returns engine only."""
+        state = _DockerSandboxState(
+            engine="docker", host=None, shell="/bin/bash", container_id="a" * 64
+        )
+        sandbox = DockerSandbox(state)
+        assert sandbox._engine_prefix == ["docker"]
+
+    def test_engine_prefix_with_host(self):
+        """Host adds -H flag to prefix."""
+        state = _DockerSandboxState(
+            engine="docker",
+            host="tcp://remote:2375",
+            shell="/bin/bash",
+            container_id="a" * 64,
+        )
+        sandbox = DockerSandbox(state)
+        assert sandbox._engine_prefix == ["docker", "-H", "tcp://remote:2375"]
+
+    def test_build_exec_command_includes_host(self):
+        """_build_exec_command includes -H when host is configured."""
+        state = _DockerSandboxState(
+            engine="docker",
+            host="tcp://remote:2375",
+            shell="/bin/bash",
+            container_id="a" * 64,
+        )
+        sandbox = DockerSandbox(state)
+        request = ExecRequest(command="ls", timeout=30, output_limit=2_097_152)
+        cmd = sandbox._build_exec_command(request)
+
+        assert cmd[0] == "docker"
+        assert cmd[1] == "-H"
+        assert cmd[2] == "tcp://remote:2375"
+        assert "exec" in cmd
+
+    def test_build_exec_command_no_host(self):
+        """_build_exec_command omits -H when no host is configured."""
+        state = _DockerSandboxState(
+            engine="docker", host=None, shell="/bin/bash", container_id="a" * 64
+        )
+        sandbox = DockerSandbox(state)
+        request = ExecRequest(command="ls", timeout=30, output_limit=2_097_152)
+        cmd = sandbox._build_exec_command(request)
+
+        assert cmd[0] == "docker"
+        assert cmd[1] == "exec"
+        assert "-H" not in cmd
+
+
 class TestDockerBackendRunCommand:
     """Tests for DockerBackend._build_run_command method."""
 
@@ -361,7 +477,7 @@ class TestDockerSandboxExecCommandConstruction:
     def sandbox(self, default_config):
         """Create a test sandbox."""
         state = _DockerSandboxState(
-            engine="docker", shell="/bin/bash", container_id="a" * 64
+            engine="docker", host=None, shell="/bin/bash", container_id="a" * 64
         )
         return DockerSandbox(state)
 
@@ -439,7 +555,7 @@ class TestDockerSandboxExec:
     def sandbox(self, default_config):
         """Create a test sandbox."""
         state = _DockerSandboxState(
-            engine="docker", shell="/bin/bash", container_id="a" * 64
+            engine="docker", host=None, shell="/bin/bash", container_id="a" * 64
         )
         return DockerSandbox(state)
 
@@ -572,7 +688,7 @@ class TestDockerSandboxStop:
     def sandbox(self, default_config):
         """Create a test sandbox."""
         state = _DockerSandboxState(
-            engine="docker", shell="/bin/bash", container_id="a" * 64
+            engine="docker", host=None, shell="/bin/bash", container_id="a" * 64
         )
         return DockerSandbox(state)
 
@@ -624,7 +740,7 @@ class TestDockerSandboxDeathDetection:
     def sandbox(self, default_config):
         """Create a test sandbox."""
         state = _DockerSandboxState(
-            engine="docker", shell="/bin/bash", container_id="a" * 64
+            engine="docker", host=None, shell="/bin/bash", container_id="a" * 64
         )
         return DockerSandbox(state)
 
@@ -693,6 +809,7 @@ class TestDockerSandboxSandboxId:
         """sandbox_id returns first 12 chars of container_id."""
         state = _DockerSandboxState(
             engine="docker",
+            host=None,
             shell="/bin/bash",
             container_id="abcd1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
         )
