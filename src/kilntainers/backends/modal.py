@@ -6,15 +6,11 @@ import os
 import time
 from dataclasses import dataclass
 
+import modal
+
 from kilntainers.backends.base import Backend, ExecRequest, ExecResult, Sandbox
 from kilntainers.config import BackendConfig
 from kilntainers.errors import BackendError, SandboxDiedError
-
-# Modal SDK is optional — handle ImportError
-try:
-    import modal
-except ImportError:
-    modal = None  # type: ignore
 
 
 class _OutputLimitExceeded(Exception):
@@ -91,17 +87,17 @@ class ModalBackend(Backend):
             help="Memory in MiB (default: 512)",
         )
         group.add_argument(
-            "--modal-gpu",
+            "--gpu",
             default=None,
             help='GPU type (e.g., "A10G", "H100")',
         )
         group.add_argument(
-            "--modal-region",
+            "--region",
             default=None,
             help='Geographic region (e.g., "us-east")',
         )
         group.add_argument(
-            "--modal-sandbox-timeout",
+            "--sandbox-timeout",
             type=int,
             default=3600,
             help="Sandbox lifetime timeout in seconds (default: 3600, max 86400)",
@@ -119,18 +115,13 @@ class ModalBackend(Backend):
             network_enabled=args.network,
             cpu=args.modal_cpu,
             memory=args.modal_memory,
-            gpu=args.modal_gpu,
-            region=args.modal_region,
-            sandbox_timeout=args.modal_sandbox_timeout,
+            gpu=args.gpu,
+            region=args.region,
+            sandbox_timeout=args.sandbox_timeout,
             default_timeout=args.timeout,
         )
 
     def __init__(self, config: ModalBackendConfig) -> None:
-        if modal is None:
-            raise BackendError(
-                "Modal backend requires the 'modal' package. "
-                "Install it with: pip install kilntainers[modal]"
-            )
         super().__init__(config)
         # Override parent's _config with more specific type for type checker
         self._config: ModalBackendConfig = config
@@ -169,7 +160,7 @@ class ModalBackend(Backend):
                 "and Modal service status at https://status.modal.com"
             )
 
-    def _build_image(self) -> "modal.Image":
+    def _build_image(self) -> modal.Image:
         """Construct the Modal Image from configuration."""
         if self._config.image is None:
             return modal.Image.debian_slim()
@@ -263,7 +254,7 @@ class ModalSandbox(Sandbox):
     def __init__(
         self,
         *,
-        modal_sandbox: "modal.Sandbox",
+        modal_sandbox: modal.Sandbox,
         shell: str,
     ) -> None:
         self._modal_sandbox = modal_sandbox
@@ -318,7 +309,7 @@ class ModalSandbox(Sandbox):
 
     async def _read_streams(
         self,
-        process: "modal.container_process.ContainerProcess",
+        process: modal.container_process.ContainerProcess,
         output_limit: int,
     ) -> tuple[str, str]:
         """Read stdout and stderr with combined limit enforcement.
@@ -354,7 +345,7 @@ class ModalSandbox(Sandbox):
 
     async def _read_output_with_limit(
         self,
-        process: "modal.container_process.ContainerProcess",
+        process: modal.container_process.ContainerProcess,
         output_limit: int,
         request_timeout: int,
     ) -> tuple[str, str]:
@@ -395,8 +386,13 @@ class ModalSandbox(Sandbox):
                 request.timeout,
             )
 
-            # Wait for process to finish and get exit code
-            await process.wait.aio()
+            # Wait for process to finish and get exit code.
+            # Client-side safety timeout prevents indefinite hang if
+            # Modal's API stalls after output streams close.
+            await asyncio.wait_for(
+                process.wait.aio(),
+                timeout=request.timeout + 15,
+            )
             exit_code = process.returncode
 
             elapsed_ms = int((time.monotonic() - start_time) * 1000)

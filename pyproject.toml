@@ -39,4 +39,5 @@ extend-select = ["I","F401","RUF","TID"]
 asyncio_mode = "auto"
 markers = [
     "docker_integration: marks tests that require Docker (deselect with '-m \"not docker_integration\"')",
+    "modal_integration: marks tests that require Modal authentication and incur costs (deselect with '-m \"not modal_integration\"')",
 ]

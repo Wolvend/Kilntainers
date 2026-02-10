@@ -16,7 +16,6 @@ from kilntainers.backends.modal import (
 )
 from kilntainers.errors import BackendError, SandboxDiedError
 
-
 # --- Mock Modal SDK utilities ---
 
 
@@ -286,9 +285,9 @@ class TestModalBackendCLI:
         assert "--modal-app-name" in parser.arguments
         assert "--modal-cpu" in parser.arguments
         assert "--modal-memory" in parser.arguments
-        assert "--modal-gpu" in parser.arguments
-        assert "--modal-region" in parser.arguments
-        assert "--modal-sandbox-timeout" in parser.arguments
+        assert "--gpu" in parser.arguments
+        assert "--region" in parser.arguments
+        assert "--sandbox-timeout" in parser.arguments
 
     def test_config_from_args(self):
         """Config is built from args correctly."""
@@ -298,9 +297,9 @@ class TestModalBackendCLI:
             modal_app_name="test-app",
             modal_cpu=2.0,
             modal_memory=1024,
-            modal_gpu="A10G",
-            modal_region="us-east",
-            modal_sandbox_timeout=7200,
+            gpu="A10G",
+            region="us-east",
+            sandbox_timeout=7200,
             image="python:3.12",
             shell="/bin/sh",
             network=True,
@@ -330,9 +329,9 @@ class TestModalBackendCLI:
             modal_app_name="kilntainers",
             modal_cpu=1.0,
             modal_memory=512,
-            modal_gpu=None,
-            modal_region=None,
-            modal_sandbox_timeout=3600,
+            gpu=None,
+            region=None,
+            sandbox_timeout=3600,
             image=None,
             shell="/bin/bash",
             network=False,
@@ -748,24 +747,6 @@ class TestModalSandboxSandboxId:
         sandbox = ModalSandbox(modal_sandbox=mock_sb, shell="/bin/bash")  # type: ignore[arg-type]
 
         assert sandbox.sandbox_id == "sb-custom-456"
-
-
-class TestModalBackendImportError:
-    """Tests for Modal package not installed."""
-
-    def test_modal_not_installed(self, monkeypatch):
-        """Raise clear error when modal package is not available."""
-
-        # Temporarily set modal to None
-        monkeypatch.setattr("kilntainers.backends.modal.modal", None)
-
-        config = ModalBackendConfig()
-
-        with pytest.raises(BackendError) as exc_info:
-            ModalBackend(config)
-
-        assert "modal" in str(exc_info.value).lower()
-        assert "package" in str(exc_info.value).lower()
 
 
 # --- Mock helpers for CLI tests ---
