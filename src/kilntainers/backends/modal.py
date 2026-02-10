@@ -357,7 +357,7 @@ class ModalSandbox(Sandbox):
         """
         return await asyncio.wait_for(
             self._read_streams(process, output_limit),
-            timeout=request_timeout + 10,  # safety buffer
+            timeout=request_timeout + 1,  # safety buffer
         )
 
     async def _do_exec(self, request: ExecRequest) -> ExecResult:
@@ -391,7 +391,7 @@ class ModalSandbox(Sandbox):
             # Modal's API stalls after output streams close.
             await asyncio.wait_for(
                 process.wait.aio(),
-                timeout=request.timeout + 5,
+                timeout=request.timeout + 1,
             )
             exit_code = process.returncode
 

@@ -76,12 +76,12 @@ class TestConnection:
         """A bad --docker-host value causes validation to fail with BackendError."""
         config = DockerBackendConfig(
             engine=engine,
-            host="tcp://192.0.2.1:1",  # RFC 5737 non-routable
+            host="tcp://127.0.0.1:1",  # Connection refused is faster than timeout
         )
         backend = DockerBackend(config)
 
         with pytest.raises(BackendError) as exc_info:
-            await backend.validate()
+            await asyncio.wait_for(backend.validate(), timeout=2)
 
         assert "Cannot connect to" in str(exc_info.value)
 

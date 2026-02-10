@@ -579,11 +579,19 @@ class TestModalSandboxExec:
         mock_sb.set_exec_response(blocking_process)
 
         request = ExecRequest(command="sleep 60", timeout=1, output_limit=2_097_152)
+        
+        # We want to test that it returns quickly even if the stream is blocking
+        # The internal implementation uses timeout + 10 for safety, but the 
+        # actual timeout should be enforced by the request.timeout.
+        start_time = asyncio.get_event_loop().time()
         result = await sandbox.exec(request)
+        end_time = asyncio.get_event_loop().time()
 
         assert result.exit_code == 124
         assert "timed out" in result.stderr
         assert result.stdout == ""
+        # Should not have waited for the full 1000s or even the safety buffer
+        assert end_time - start_time < 5
 
     @pytest.mark.asyncio
     async def test_exec_output_limit(self, sandbox):
