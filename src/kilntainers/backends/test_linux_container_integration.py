@@ -4,16 +4,13 @@ These tests verify the core behavioral contract of all Linux container backends.
 They are parameterized by backend type.
 """
 
-import os
-import shutil
-
 import pytest
 
 from kilntainers.backends.base import ExecRequest
-from kilntainers.backends.docker import DockerBackend, DockerBackendConfig
 from kilntainers.backends.modal import ModalBackend, ModalBackendConfig
-from kilntainers.errors import BackendError
+from kilntainers.backends.test_docker_integration import get_docker_backend
 from kilntainers.backends.test_modal_integration import _modal_auth_available
+from kilntainers.errors import BackendError
 
 
 @pytest.fixture(params=["docker", "podman", "modal"])
@@ -23,18 +20,7 @@ async def backend(request):
     backend_type = request.param
 
     if backend_type in ["docker", "podman"]:
-        if shutil.which(backend_type) is None:
-            pytest.skip(f"{backend_type} CLI not installed")
-
-        config = DockerBackendConfig(engine=backend_type)
-        backend = DockerBackend(config)
-        try:
-            await backend.validate()
-        except BackendError as e:
-            if f"Is the {backend_type} daemon running?" in str(e):
-                pytest.skip(f"{backend_type} daemon not running")
-            raise
-        return backend
+        return await get_docker_backend(backend_type)
 
     elif backend_type == "modal":
         if not _modal_auth_available():

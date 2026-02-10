@@ -31,6 +31,7 @@ def _modal_auth_available() -> bool:
     # Try to validate with Modal client (may fail if no auth)
     try:
         import modal
+
         # Check if there's a default profile or active token
         # modal.config.Config() will load the configuration
         config = modal.config.Config()
