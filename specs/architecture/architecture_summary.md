@@ -12,7 +12,7 @@ Python package layout (`src/kilntainers/`), module responsibilities, entry point
 
 ### [Phase 2: Backend Abstraction Layer](backend_abstraction.md)
 
-The `Backend` and `Sandbox` ABCs that define the central interface between the MCP server and any backend implementation. Covers `ExecResult` and `ExecRequest` dataclasses, the template method pattern for validation and sandbox creation, async method contracts, the `wait_for_death()` death detection mechanism, concurrency model (multi-sandbox support, serial exec within a sandbox), the `Mount` type (designed for future use), and the error types (`KilntainersError`, `BackendError`, `SandboxDiedError`).
+The `Backend` and `Sandbox` ABCs that define the central interface between the MCP server and any backend implementation. Covers `ExecResult` and `ExecRequest` dataclasses, the template method pattern for validation and sandbox creation, async method contracts, the `wait_for_death()` death detection mechanism, concurrency model (multi-sandbox support, serial exec within a sandbox), the `Mount` type (designed for future use), the error types (`KilntainersError`, `BackendError`, `SandboxDiedError`), and the CLI argument classmethods (`add_cli_arguments()`, `config_from_args()`) that allow each backend to own its argument definitions and config construction.
 
 ### [Phase 3: Docker Backend Implementation](docker_backend.md)
 
@@ -24,7 +24,7 @@ MCP library evaluation (official `mcp` SDK v1.x with built-in FastMCP), server a
 
 ### [Phase 5: CLI, Configuration & Startup](cli_and_startup.md)
 
-Argument parsing with `argparse` (no third-party CLI libraries), the `ServerConfig` and `DockerBackendConfig` frozen dataclasses, argument-to-config mapping, startup validation (HTTP-only args in stdio mode, mutual exclusivity, value ranges), the backend registry, the full startup flow from `main()` through `asyncio.run()` to `mcp.run()`, exit codes (1 for config errors, 2 for argparse errors), `--help` output organization, and stderr-only output conventions.
+Argument parsing with `argparse` (no third-party CLI libraries), the `ServerConfig`, `BackendConfig`, and `DockerBackendConfig` frozen dataclasses, backend-owned argument registration and config construction via classmethods, startup validation (HTTP-only args in stdio mode, mutual exclusivity, value ranges), the backend registry, the full startup flow from `main()` through `mcp.run()`, exit codes (1 for config errors, 2 for argparse errors), `--help` output organization, and stderr-only output conventions.
 
 ### [Phase 6: Connection & Session Lifecycle](connection_lifecycle.md)
 

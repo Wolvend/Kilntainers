@@ -69,17 +69,33 @@ class ServerConfig:
 - `output_limit` is in bytes, matching the functional spec and the `ExecRequest.output_limit` field.
 - `default_timeout` is the server-wide default. Per-call `timeout` overrides happen in the tool handler (Phase 4 §6.2).
 
-### 2.2 DockerBackendConfig
+### 2.2 BackendConfig Base Class
 
-Docker-specific configuration. This was previewed in Phase 3 §2 — here is the authoritative definition.
+All backend config dataclasses inherit from `BackendConfig`, which contains fields shared across all backends:
 
 ```python
 @dataclass(frozen=True, slots=True, kw_only=True)
-class DockerBackendConfig:
+class BackendConfig:
+    """Base class for all backend configurations.
+
+    Contains fields shared across all backends. Backend-specific
+    config classes inherit from this.
+    """
+    # Passed through for tool description generation
+    default_timeout: int = 120
+```
+
+### 2.3 DockerBackendConfig
+
+Docker-specific configuration. Inherits from `BackendConfig`. This was previewed in Phase 3 §2 — here is the authoritative definition.
+
+```python
+@dataclass(frozen=True, slots=True, kw_only=True)
+class DockerBackendConfig(BackendConfig):
     """Configuration for the Docker backend.
 
-    Populated from CLI args by the startup layer. Consumed by
-    DockerBackend (Phase 3).
+    Populated from CLI args by DockerBackend.config_from_args().
+    Consumed by DockerBackend (Phase 3).
     """
     engine: str = "docker"
     image: str = "debian:bookworm-slim"
@@ -88,14 +104,11 @@ class DockerBackendConfig:
     cpu: str | None = None
     memory: str | None = None
     docker_run_flags: list[str] = field(default_factory=list)
-
-    # Passed through for tool description generation
-    default_timeout: int = 120
 ```
 
-**Why `default_timeout` is in both configs:** `ServerConfig.default_timeout` is used by the MCP handler to resolve per-call timeout defaults. `DockerBackendConfig.default_timeout` is used by `DockerBackend.tool_instructions()` to embed the actual timeout value in the tool description text. Both are set from the same `--timeout` CLI arg.
+**Why `default_timeout` is in both configs:** `ServerConfig.default_timeout` is used by the MCP handler to resolve per-call timeout defaults. `BackendConfig.default_timeout` (inherited by `DockerBackendConfig`) is used by `DockerBackend.tool_instructions()` to embed the actual timeout value in the tool description text. Both are set from the same `--timeout` CLI arg.
 
-### 2.3 Why Frozen Dataclasses
+### 2.4 Why Frozen Dataclasses
 
 Configuration is immutable after construction:
 
@@ -109,7 +122,7 @@ Configuration is immutable after construction:
 
 ### 3.1 Parser Construction
 
-The argument parser is constructed in `cli.py` with arguments organized into groups for `--help` readability. Groups match the functional spec's parameter tables (§3.1, §3.2).
+The argument parser is constructed in `cli.py` with core/shared arguments defined directly, and backend-specific arguments delegated to each backend class. The parser iterates the `BACKEND_REGISTRY` and calls each backend's `add_cli_arguments()` classmethod to register its own argument group.
 
 ```python
 def build_parser() -> argparse.ArgumentParser:
@@ -121,12 +134,12 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
 
-    # --- Core parameters ---
+    # --- Core parameters (shared across all backends) ---
     core = parser.add_argument_group("core options")
     core.add_argument(
         "--backend",
         default="docker",
-        choices=["docker"],
+        choices=list(BACKEND_REGISTRY.keys()),
         help="Backend to use (default: docker)",
     )
     core.add_argument(
@@ -178,65 +191,29 @@ def build_parser() -> argparse.ArgumentParser:
         help="Append to the backend's default tool description",
     )
 
-    # --- Docker backend parameters ---
-    docker = parser.add_argument_group("docker backend options")
-    docker.add_argument(
-        "--engine",
-        default="docker",
-        help="Container CLI binary (default: docker). Supports podman.",
-    )
-    docker.add_argument(
-        "--image",
-        default="debian:bookworm-slim",
-        help="Docker image (default: debian:bookworm-slim)",
-    )
-    docker.add_argument(
-        "--shell",
-        default="/bin/bash",
-        help="Shell binary for command mode (default: /bin/bash)",
-    )
-    docker.add_argument(
-        "--network",
-        action="store_true",
-        default=False,
-        help="Enable network access in sandboxes (default: disabled)",
-    )
-    docker.add_argument(
-        "--cpu",
-        default=None,
-        help='Docker CPU limit (e.g., "1.5")',
-    )
-    docker.add_argument(
-        "--memory",
-        default=None,
-        help='Docker memory limit (e.g., "512m")',
-    )
-    docker.add_argument(
-        "--docker-run-flag",
-        action="append",
-        default=None,
-        dest="docker_run_flags",
-        help=(
-            "Additional flag passed to docker run. Repeatable. "
-            '(e.g., --docker-run-flag "--pids-limit=256")'
-        ),
-    )
+    # --- Backend-specific parameters (delegated to each backend) ---
+    for name, backend_cls in BACKEND_REGISTRY.items():
+        group = parser.add_argument_group(f"{name} backend options")
+        backend_cls.add_cli_arguments(group)
 
     return parser
 ```
 
+Each backend class owns its argument definitions via the `add_cli_arguments()` classmethod (see §3.3). For example, `DockerBackend.add_cli_arguments()` registers `--engine`, `--image`, `--shell`, `--network`, `--cpu`, `--memory`, and `--docker-run-flag`.
+
 ### 3.2 Argument-to-Config Mapping
 
-After parsing, arguments are split into the appropriate config dataclasses:
+After parsing, arguments are split into the appropriate config dataclasses. `ServerConfig` is constructed directly from shared args. The backend config is constructed by the selected backend's `config_from_args()` classmethod:
 
 ```python
 def build_configs(
     args: argparse.Namespace,
-) -> tuple[ServerConfig, DockerBackendConfig]:
+) -> tuple[ServerConfig, BackendConfig]:
     """Build config dataclasses from parsed arguments.
 
     This function maps flat CLI arguments to the typed config objects
-    consumed by the server and backend layers.
+    consumed by the server and backend layers. Server config is built
+    here; backend config is delegated to the backend class.
     """
     server_config = ServerConfig(
         transport=args.transport,
@@ -249,35 +226,31 @@ def build_configs(
         session_timeout=args.session_timeout,
     )
 
-    docker_config = DockerBackendConfig(
-        engine=args.engine,
-        image=args.image,
-        shell=args.shell,
-        network_enabled=args.network,
-        cpu=args.cpu,
-        memory=args.memory,
-        docker_run_flags=args.docker_run_flags or [],
-        default_timeout=args.timeout,
-    )
+    backend_cls = get_backend_class(args.backend)
+    backend_config = backend_cls.config_from_args(args)
 
-    return server_config, docker_config
+    return server_config, backend_config
 ```
 
 **Notes:**
 
-- `docker_run_flags` coalesces `None` (no `--docker-run-flag` args) to an empty list. This simplifies downstream code.
-- Both configs get `default_timeout` from the same `args.timeout` source.
+- Each backend's `config_from_args()` knows how to read its own args from the namespace and construct its own config type.
+- Both configs get `default_timeout` from the same `args.timeout` source (backends access `args.timeout` in their `config_from_args()`).
 - This function is pure (no side effects) and easy to test.
 
-### 3.3 Future Backend Arg Routing
+### 3.3 Backend-Owned CLI Arguments
 
-In v1, there's only one backend (Docker), so `build_configs` always creates a `DockerBackendConfig`. When additional backends are added:
+Each backend class provides two classmethods that own its CLI argument lifecycle:
 
-1. Backend-specific arg groups are always defined in the parser (so `--help` shows everything).
-2. `build_configs` reads `args.backend` and constructs the appropriate config type.
-3. Backend-specific args for the non-selected backend are ignored (they still have defaults in the namespace — they're simply not read).
+1. **`add_cli_arguments(group)`** — Registers backend-specific arguments on an `argparse._ArgumentGroup`. Called during parser construction (§3.1) for every backend in the registry, so `--help` shows all available options.
 
-This avoids any complex dynamic argument registration. All args are always available; the routing logic decides which ones matter.
+2. **`config_from_args(args)`** — Reads parsed arguments from the `argparse.Namespace` and constructs the backend's own config dataclass. Called during config construction (§3.2) for the selected backend only.
+
+This design means `cli.py` has zero backend-specific knowledge — no backend-specific `add_argument()` calls, no backend-specific config construction. Adding a new backend is entirely self-contained: implement the class, add it to the registry, and it works.
+
+**Argument namespace sharing:** All backends' args live in the same `argparse.Namespace`. Backend-specific args for non-selected backends are ignored (they still have defaults in the namespace — they're simply not read). Backend authors should use distinctive arg names to avoid collisions (e.g., `--docker-run-flag`, not `--extra-flag`).
+
+See the Backend ABC definition in `backend_abstraction.md` §4 for the abstract method signatures.
 
 ---
 
@@ -290,7 +263,7 @@ Validation runs after argument parsing, before creating the backend or server. I
 ```python
 def validate_config(
     server_config: ServerConfig,
-    docker_config: DockerBackendConfig,
+    backend_config: BackendConfig,
 ) -> None:
     """Validate configuration constraints that span multiple parameters.
 
@@ -416,7 +389,7 @@ The complete startup sequence from process launch to "ready to accept connection
 │         exits with code 2                        │
 ├─────────────────────────────────────────────────┤
 │  2. Build config objects (ServerConfig,          │
-│     DockerBackendConfig)                         │
+│     BackendConfig via backend classmethod)       │
 ├─────────────────────────────────────────────────┤
 │  3. Validate cross-cutting constraints           │
 │     └── HTTP-only args in stdio mode            │
@@ -425,7 +398,7 @@ The complete startup sequence from process launch to "ready to accept connection
 │     └── Failure → stderr message, exit 1        │
 ├─────────────────────────────────────────────────┤
 │  4. Create backend with config                   │
-│     └── DockerBackend(docker_config)            │
+│     └── backend_cls(backend_config)             │
 ├─────────────────────────────────────────────────┤
 │  5. Validate backend prerequisites (async)       │
 │     └── docker info, etc.                       │
@@ -452,41 +425,35 @@ def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
 
-    server_config, docker_config = build_configs(args)
-    validate_config(server_config, docker_config)
+    server_config, backend_config = build_configs(args)
+    validate_config(server_config, backend_config)
 
-    # Run the async startup + server
+    # Create backend from registry using selected --backend
+    backend_cls = get_backend_class(args.backend)
+    backend = backend_cls(backend_config)
+
+    # Validate backend, create server, and run
     try:
-        asyncio.run(_async_main(server_config, docker_config))
-    except KeyboardInterrupt:
-        pass  # Clean exit on Ctrl+C
-
-
-async def _async_main(
-    server_config: ServerConfig,
-    docker_config: DockerBackendConfig,
-) -> None:
-    """Async startup: validate backend, build server, run."""
-    # Create and validate backend
-    backend = DockerBackend(docker_config)
-    try:
-        await backend.validate()
+        _validate_backend(backend)
     except BackendError as e:
         _startup_error(str(e))
 
-    # Create the MCP server (assembles tool description, registers tool)
     try:
         mcp = create_server(backend, server_config)
     except BackendError as e:
         _startup_error(str(e))
 
-    # Run the transport (blocks until shutdown)
     transport = (
         "stdio" if server_config.transport == "stdio"
         else "streamable-http"
     )
-    mcp.run(transport=transport)
+    try:
+        mcp.run(transport=transport)
+    except KeyboardInterrupt:
+        pass  # Clean exit on Ctrl+C
 ```
+
+The startup flow is fully backend-agnostic — no backend class is imported or referenced directly in `cli.py`. The `get_backend_class()` lookup and the backend's own `config_from_args()` classmethod handle all backend-specific concerns.
 
 ### 6.2 Sync/Async Boundary
 
@@ -524,16 +491,21 @@ Steps 1–6 are the "startup gauntlet" — all error-prone operations complete b
 ### 7.1 `cli.py`
 
 ```python
-"""CLI entry point and startup orchestration."""
+"""CLI entry point and startup orchestration.
+
+This module has zero backend-specific knowledge. All backend
+argument definitions and config construction are delegated to
+the backend classes via classmethods.
+"""
 
 # Public
 def main() -> None: ...              # Entry point (sync)
-def build_parser() -> ArgumentParser: ...  # Argument definitions
-def build_configs(args) -> tuple[ServerConfig, DockerBackendConfig]: ...
-def validate_config(server_config, docker_config) -> None: ...
+def build_parser() -> ArgumentParser: ...  # Core args + delegates to backends
+def build_configs(args) -> tuple[ServerConfig, BackendConfig]: ...
+def validate_config(server_config, backend_config) -> None: ...
 
 # Private
-async def _async_main(server_config, docker_config) -> None: ...
+def _validate_backend(backend: Backend) -> None: ...
 def _startup_error(message: str) -> NoReturn: ...
 ```
 
@@ -543,10 +515,19 @@ def _startup_error(message: str) -> NoReturn: ...
 """Configuration dataclasses."""
 
 @dataclass(frozen=True, slots=True, kw_only=True)
+class BackendConfig:
+    """Base class for all backend configurations.
+    
+    Contains fields shared across all backends. Backend-specific
+    config classes inherit from this.
+    """
+    default_timeout: int = 120
+
+@dataclass(frozen=True, slots=True, kw_only=True)
 class ServerConfig: ...
 
 @dataclass(frozen=True, slots=True, kw_only=True)
-class DockerBackendConfig: ...
+class DockerBackendConfig(BackendConfig): ...
 ```
 
 ### 7.3 `backends/__init__.py`
@@ -554,8 +535,8 @@ class DockerBackendConfig: ...
 ```python
 """Backend registry."""
 
-BACKEND_REGISTRY: dict[str, type] = { "docker": DockerBackend }
-def get_backend_class(name: str) -> type: ...
+BACKEND_REGISTRY: dict[str, type[Backend]] = { "docker": DockerBackend }
+def get_backend_class(name: str) -> type[Backend]: ...
 ```
 
 ### 7.4 `__main__.py`
@@ -656,6 +637,7 @@ Test that `build_configs()` correctly maps parsed args to config dataclasses:
 - **`--timeout`** → appears in both `ServerConfig.default_timeout` and `DockerBackendConfig.default_timeout`.
 - **`--docker-run-flag` not provided** → `docker_config.docker_run_flags` is empty list (not None).
 - **`--network` flag** → `docker_config.network_enabled` is True.
+- **Backend delegation** → `build_configs()` calls the selected backend's `config_from_args()` classmethod.
 
 #### Validation Tests
 

@@ -336,6 +336,70 @@ class DockerBackend(Backend):
 
 The config type is backend-specific (Phase 5 covers config dataclasses). The ABC does not prescribe constructor parameters because different backends need fundamentally different configuration. (D26 — resource limits are purely backend-specific.)
 
+### CLI Argument Classmethods
+
+Each backend owns its CLI argument definitions and config construction through two abstract classmethods on the ABC:
+
+```python
+@classmethod
+@abstractmethod
+def add_cli_arguments(cls, group: argparse._ArgumentGroup) -> None:
+    """Register backend-specific CLI arguments on the given argparse group.
+
+    Called during parser construction for every registered backend,
+    so that --help shows all available options regardless of which
+    backend is selected. Argument names should be distinctive to
+    avoid collisions between backends (e.g., --docker-run-flag,
+    not --extra-flag).
+    """
+    ...
+
+@classmethod
+@abstractmethod
+def config_from_args(cls, args: argparse.Namespace) -> "BackendConfig":
+    """Build this backend's config dataclass from parsed CLI arguments.
+
+    Called during config construction for the selected backend only.
+    The backend reads its own arguments from the shared namespace
+    and returns its typed, frozen config object.
+    """
+    ...
+```
+
+**Why classmethods:** These are called before any backend instance exists — during parser construction and config building. They operate on the class, not an instance. Using `@classmethod` (not `@staticmethod`) allows subclasses to be identified and enables future patterns like inheritance.
+
+**Why on the ABC:** Putting these methods on the Backend ABC ensures every backend implements them. A backend that forgets to register its arguments or provide config construction will fail at class definition time (abstract method enforcement), not at runtime.
+
+**Example — DockerBackend:**
+
+```python
+class DockerBackend(Backend):
+    @classmethod
+    def add_cli_arguments(cls, group: argparse._ArgumentGroup) -> None:
+        group.add_argument("--engine", default="docker", ...)
+        group.add_argument("--image", default="debian:bookworm-slim", ...)
+        group.add_argument("--shell", default="/bin/bash", ...)
+        group.add_argument("--network", action="store_true", ...)
+        group.add_argument("--cpu", default=None, ...)
+        group.add_argument("--memory", default=None, ...)
+        group.add_argument("--docker-run-flag", action="append", ...)
+
+    @classmethod
+    def config_from_args(cls, args: argparse.Namespace) -> DockerBackendConfig:
+        return DockerBackendConfig(
+            engine=args.engine,
+            image=args.image,
+            shell=args.shell,
+            network_enabled=args.network,
+            cpu=args.cpu,
+            memory=args.memory,
+            docker_run_flags=args.docker_run_flags or [],
+            default_timeout=args.timeout,
+        )
+```
+
+This keeps `cli.py` backend-agnostic — it iterates the registry and delegates, with zero backend-specific code. See Phase 5 §3 for the full parser construction flow.
+
 ### Why `create_sandbox()` creates AND starts
 
 A sandbox that exists but isn't running is a useless intermediate state — `exec()` can't work, `sandbox_id` may not exist yet (Docker hasn't assigned a container ID), `wait_for_death()` has nothing to monitor. Splitting creation from starting would force every backend to guard every method with "am I started?" checks and add a third state (created-not-started, running, stopped) with no benefit. The Python standard library uses this same pattern: `asyncio.start_server()` and `subprocess.Popen()` create-and-start in one call.
@@ -481,6 +545,8 @@ All backend operations involve I/O waits: subprocess calls (Docker CLI), network
 
 | Method | Async? | Reason |
 |---|---|---|
+| `Backend.add_cli_arguments()` | No (classmethod) | Pure argparse registration. No I/O. |
+| `Backend.config_from_args()` | No (classmethod) | Pure config construction. No I/O. |
 | `Backend.validate()` | Yes | May run subprocess (e.g., `docker info`). |
 | `Backend.create_sandbox()` | Yes | Pulls images, creates containers, runs readiness check. |
 | `Backend.tool_instructions()` | No | Returns pre-composed string from config. No I/O. |
@@ -530,11 +596,11 @@ The MCP layer does not coordinate exec serialization — it simply awaits `sandb
 A new backend (e.g., Modal, E2B, WASI) requires:
 
 1. **Create `src/kilntainers/backends/{name}.py`** with `{Name}Backend(Backend)` and `{Name}Sandbox(Sandbox)`.
-2. **Implement all abstract methods:** `_validate()`, `_create_sandbox()`, `tool_instructions()` on the backend; `exec()`, `stop()`, `wait_for_death()`, `sandbox_id` on the sandbox.
-3. **Register in `backends/__init__.py`** so the `--backend` CLI arg can find it.
-4. **Add backend-specific CLI args** (Phase 5 covers arg routing).
+2. **Implement all abstract methods:** `_validate()`, `_create_sandbox()`, `tool_instructions()`, `add_cli_arguments()`, `config_from_args()` on the backend; `exec()`, `stop()`, `wait_for_death()`, `sandbox_id` on the sandbox.
+3. **Create a config dataclass** (e.g., `ModalBackendConfig(BackendConfig)`) in `config.py`.
+4. **Register in `backends/__init__.py`** so the `--backend` CLI arg can find it.
 
-No changes to the MCP layer, Backend ABC, or Sandbox ABC are needed. This is the pluggability guarantee (D2).
+No changes to `cli.py`, the MCP layer, Backend ABC, or Sandbox ABC are needed. The backend's `add_cli_arguments()` classmethod registers its own CLI args, and `config_from_args()` constructs its own config. This is the pluggability guarantee (D2).
 
 ### Mounts (D14)
 
@@ -557,9 +623,12 @@ For clarity, here is the full set of types and ABCs defined in `backends/base.py
 ```python
 """Backend abstraction layer — ABCs and shared types."""
 
+import argparse
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from types import TracebackType
+
+from kilntainers.config import BackendConfig
 
 
 # --- Shared types ---
@@ -639,6 +708,22 @@ class Backend(ABC):
     def __init__(self) -> None:
         self._validated: bool = False
 
+    # --- CLI argument classmethods ---
+
+    @classmethod
+    @abstractmethod
+    def add_cli_arguments(cls, group: argparse._ArgumentGroup) -> None:
+        """Register backend-specific CLI arguments."""
+        ...
+
+    @classmethod
+    @abstractmethod
+    def config_from_args(cls, args: argparse.Namespace) -> BackendConfig:
+        """Build backend config from parsed CLI arguments."""
+        ...
+
+    # --- Lifecycle methods ---
+
     async def validate(self) -> None:
         if self._validated:
             return
@@ -698,6 +783,14 @@ class StubBackend(Backend):
     validate_called: int = 0
     start_called: int = 0
 
+    @classmethod
+    def add_cli_arguments(cls, group: argparse._ArgumentGroup) -> None:
+        group.add_argument("--stub-option", default="default")
+
+    @classmethod
+    def config_from_args(cls, args: argparse.Namespace) -> StubBackendConfig:
+        return StubBackendConfig(stub_option=args.stub_option)
+
     async def _validate(self) -> None:
         self.validate_called += 1
 
@@ -711,6 +804,8 @@ class StubBackend(Backend):
 
 Tests:
 
+- `add_cli_arguments()` registers arguments on an argparse group.
+- `config_from_args()` constructs the correct config type from parsed args.
 - `validate()` calls `_validate()` on first call, caches on subsequent calls.
 - `create_sandbox()` auto-calls `validate()` if not already validated.
 - `create_sandbox()` does not re-validate if already validated.

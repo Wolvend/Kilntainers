@@ -23,10 +23,10 @@ The Docker backend receives its configuration as a typed dataclass. The full def
 
 ```python
 @dataclass(frozen=True, slots=True, kw_only=True)
-class DockerBackendConfig:
+class DockerBackendConfig(BackendConfig):
     """Configuration for the Docker backend.
 
-    Populated from CLI args by the startup layer (Phase 5).
+    Populated from CLI args by DockerBackend.config_from_args().
     """
     engine: str = "docker"                    # --engine
     image: str = "debian:bookworm-slim"       # --image
