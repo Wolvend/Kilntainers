@@ -106,10 +106,10 @@ Verify the full pipeline works end-to-end: CLI → startup → FastMCP → tool 
 
 **What to build:**
 
-- [ ] Verify end-to-end: install the package, run `kilntainers` as an MCP server, connect a client, execute commands, receive responses
-- [ ] Stdio lifecycle integration tests: full session (start → exec → stop), sandbox creation failure handling, graceful shutdown (stdin EOF, SIGTERM)
-- [ ] Death propagation integration test: kill container externally, verify server exits
-- [ ] Polish: verify `--help` output, test with a real MCP client (e.g. Claude Desktop or similar), fix any rough edges
+- [x] Verify end-to-end: install the package, run `kilntainers` as an MCP server, connect a client, execute commands, receive responses
+- [x] Stdio lifecycle integration tests: full session (start → exec → stop), sandbox creation failure handling, graceful shutdown (stdin EOF, SIGTERM)
+- [x] Death propagation integration test: kill container externally, verify server exits
+- [x] Polish: verify `--help` output, test with a real MCP client (e.g. Claude Desktop or similar), fix any rough edges
 
 **Architecture references:**
 - [connection_lifecycle.md](architecture/connection_lifecycle.md) §2 (stdio lifecycle), §6 (death propagation), §7 (graceful shutdown)

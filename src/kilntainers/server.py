@@ -94,6 +94,8 @@ def assemble_tool_description(
 def create_lifespan(
     backend: Backend,
     transport: str,
+    *,
+    death_callback: Callable[[], None] | None = None,
 ) -> Callable[[FastMCP], AsyncContextManager[SessionContext]]:
     """Create a lifespan context manager for the given transport.
 
@@ -103,6 +105,9 @@ def create_lifespan(
     Args:
         backend: The backend to use for creating sandboxes.
         transport: The transport mode ("stdio" or "http").
+        death_callback: Optional callback for sandbox death in stdio mode.
+            If None, sends SIGTERM to current process. For testing, pass
+            a custom callback to capture death notifications.
 
     Returns:
         An async context manager function compatible with FastMCP.
@@ -127,9 +132,13 @@ def create_lifespan(
 
             # If we reach here, sandbox died (or monitoring failed)
             if transport == "stdio":
-                # Trigger process shutdown via SIGTERM to self
-                # This reuses the existing graceful shutdown path
-                os.kill(os.getpid(), signal.SIGTERM)
+                if death_callback is not None:
+                    # Test mode: call custom callback instead of sending signal
+                    death_callback()
+                else:
+                    # Trigger process shutdown via SIGTERM to self
+                    # This reuses the existing graceful shutdown path
+                    os.kill(os.getpid(), signal.SIGTERM)
             # For HTTP: sandbox is dead; subsequent exec calls will raise
             # SandboxDiedError. Proactive session termination can be
             # added here if SDK supports it.

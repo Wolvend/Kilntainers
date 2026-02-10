@@ -22,14 +22,25 @@ from kilntainers.backends.docker import (
 )
 from kilntainers.errors import BackendError, SandboxDiedError
 
+_engine_cache: dict[str, bool] = {}
+
+
+def validate_engine(engine: str) -> None:
+    """Validate that the engine CLI is installed and the daemon is running."""
+    available = _engine_cache.get(engine, None)
+    if available is None:
+        available = shutil.which(engine) is not None
+
+    if not available:
+        pytest.skip(f"{engine} CLI not installed")
+
 
 async def get_docker_backend(engine: str) -> DockerBackend:
     """Create and validate a Docker/Podman backend.
 
     Skips the test if the engine CLI is not installed or the daemon is not running.
     """
-    if shutil.which(engine) is None:
-        pytest.skip(f"{engine} CLI not installed")
+    validate_engine(engine)
 
     config = DockerBackendConfig(engine=engine)
     backend = DockerBackend(config)
@@ -49,8 +60,7 @@ async def engine(request):
     Automatically skips if the engine CLI is not installed on the system.
     """
     engine = request.param
-    if shutil.which(engine) is None:
-        pytest.skip(f"{engine} CLI not installed")
+    validate_engine(engine)
     return engine
 
 
