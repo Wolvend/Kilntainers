@@ -2,6 +2,8 @@
 
 import argparse
 import asyncio
+import os
+import signal
 import sys
 from typing import NoReturn
 
@@ -314,6 +316,15 @@ def main() -> None:
     # Run the transport (blocks until shutdown)
     # mcp.run() manages its own event loop, so we call it directly
     transport = "stdio" if server_config.transport == "stdio" else "streamable-http"
+
+    # Register SIGTERM handler to convert to SIGINT for clean shutdown
+    # FastMCP handles SIGINT (Ctrl+C) gracefully, so we redirect SIGTERM to the same path
+    def _handle_sigterm(signum: int, frame: object) -> None:
+        """Convert SIGTERM to SIGINT for clean shutdown."""
+        os.kill(os.getpid(), signal.SIGINT)
+
+    signal.signal(signal.SIGTERM, _handle_sigterm)
+
     try:
         mcp.run(transport=transport)
     except KeyboardInterrupt:
