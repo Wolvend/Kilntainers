@@ -5,7 +5,10 @@ import asyncio
 import sys
 from typing import NoReturn
 
-from kilntainers.backends import BACKEND_REGISTRY, get_backend_class
+from kilntainers.backends import (
+    get_available_backend_names,
+    get_backend_class,
+)
 from kilntainers.backends.base import Backend
 from kilntainers.config import BackendConfig, ServerConfig
 from kilntainers.errors import BackendError
@@ -29,13 +32,16 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
 
+    # Get available backend names for choices
+    available_backends = get_available_backend_names()
+
     # --- Core parameters ---
     core = parser.add_argument_group("core options")
     core.add_argument(
         "--backend",
         default="docker",
-        choices=list(BACKEND_REGISTRY.keys()),
-        help="Backend to use (default: docker)",
+        choices=available_backends,
+        help=f"Backend to use (default: docker). Available: {', '.join(available_backends)}",
     )
     core.add_argument(
         "--transport",
@@ -72,6 +78,17 @@ def build_parser() -> argparse.ArgumentParser:
         default=_UNSET,
         help="Idle session timeout in seconds (default: 300, HTTP mode only)",
     )
+    core.add_argument(
+        "--shell",
+        default="/bin/bash",
+        help="Shell binary for command mode (e.g., /bin/bash, ash). Default: /bin/bash.",
+    )
+    core.add_argument(
+        "--network",
+        action="store_true",
+        default=False,
+        help="Enable network access in sandboxes (default: disabled)",
+    )
 
     # --- Tool description ---
     desc = parser.add_argument_group("tool description")
@@ -87,9 +104,16 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     # --- Backend-specific parameters (delegated to each backend) ---
-    for name, backend_cls in BACKEND_REGISTRY.items():
+    for name in available_backends:
         group = parser.add_argument_group(f"{name} backend options")
-        backend_cls.add_cli_arguments(group)
+        try:
+            backend_cls = get_backend_class(name)
+            backend_cls.add_cli_arguments(group)
+        except BackendError:
+            # Dependencies not installed — skip this backend's CLI args.
+            # The backend name still appears in --backend choices so the
+            # user can discover it, and gets a clear install message if selected.
+            pass
 
     return parser
 
@@ -206,6 +230,7 @@ def validate_config(server_config: ServerConfig) -> None:
 async def _async_main(
     server_config: ServerConfig,
     backend_config: BackendConfig,
+    backend_name: str,
 ) -> None:
     """Async startup: validate backend, build server, run.
 
@@ -217,12 +242,13 @@ async def _async_main(
     Args:
         server_config: Server configuration.
         backend_config: Backend configuration.
+        backend_name: Name of the backend to use.
 
     Raises:
         SystemExit: If backend validation or server creation fails.
     """
     # Create and validate backend
-    backend_class = get_backend_class("docker")  # Only docker in v1
+    backend_class = get_backend_class(backend_name)
     backend = backend_class(backend_config)
     try:
         await backend.validate()
@@ -267,12 +293,13 @@ def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
 
-    server_config, docker_config = build_configs(args)
+    server_config, backend_config = build_configs(args)
     validate_config(server_config)
 
     # Create and validate backend (async, run in its own event loop)
-    backend_class = get_backend_class("docker")  # Only docker in v1
-    backend = backend_class(docker_config)
+    backend_name = args.backend
+    backend_class = get_backend_class(backend_name)
+    backend = backend_class(backend_config)
     try:
         _validate_backend(backend)
     except BackendError as e:

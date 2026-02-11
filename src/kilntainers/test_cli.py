@@ -474,7 +474,7 @@ async def test_async_main_backend_validation_fails():
         mock_get_backend.return_value = lambda _: mock_backend
 
         with pytest.raises(SystemExit) as exc_info:
-            await _async_main(server_config, docker_config)
+            await _async_main(server_config, docker_config, "docker")
 
     assert exc_info.value.code == 1
 
@@ -496,7 +496,7 @@ async def test_async_main_server_creation_fails():
         mock_create_server.side_effect = BackendError("No tool instructions")
 
         with pytest.raises(SystemExit) as exc_info:
-            await _async_main(server_config, docker_config)
+            await _async_main(server_config, docker_config, "docker")
 
     assert exc_info.value.code == 1
 
@@ -520,7 +520,7 @@ async def test_async_main_successful_startup():
         mock_get_backend.return_value = lambda _: mock_backend
         mock_create_server.return_value = mock_mcp
 
-        await _async_main(server_config, docker_config)
+        await _async_main(server_config, docker_config, "docker")
 
         # Verify backend was validated
         mock_backend.validate.assert_called_once()
@@ -551,7 +551,7 @@ async def test_async_main_transport_mapping():
         mock_get_backend.return_value = lambda _: mock_backend
         mock_create_server.return_value = mock_mcp
 
-        await _async_main(server_config, docker_config)
+        await _async_main(server_config, docker_config, "docker")
 
         # Verify transport mapping (keyword arg)
         mock_mcp.run.assert_called_once_with(transport="streamable-http")

@@ -1,20 +1,30 @@
 """Backend implementations and registry."""
 
-from kilntainers.backends.base import Backend
-from kilntainers.backends.docker import DockerBackend
-from kilntainers.backends.modal import ModalBackend
+import importlib.metadata
 
-# Maps --backend CLI values to backend classes
-BACKEND_REGISTRY: dict[str, type[Backend]] = {
-    "docker": DockerBackend,
-    "modal": ModalBackend,
-}
+from kilntainers.backends.base import Backend
+from kilntainers.errors import BackendError
+
+
+def _discover_entry_points() -> dict[str, importlib.metadata.EntryPoint]:
+    """Discover registered backends via entry points.
+
+    Returns a dict mapping backend names to their EntryPoint objects.
+    Entry points are not loaded (imported) at discovery time.
+    """
+    eps = importlib.metadata.entry_points(group="kilntainers.backends")
+    return {ep.name: ep for ep in eps}
+
+
+# Discovered at import time (fast — no imports, just metadata scan)
+_ENTRY_POINTS = _discover_entry_points()
 
 
 def get_backend_class(name: str) -> type[Backend]:
-    """Look up a backend class by name.
+    """Look up and load a backend class by name.
 
     Raises KeyError if the backend name is not registered.
+    Raises BackendError if the backend's dependencies are not installed.
 
     Args:
         name: The backend name from the --backend CLI argument.
@@ -24,8 +34,40 @@ def get_backend_class(name: str) -> type[Backend]:
 
     Raises:
         KeyError: If the backend name is not in the registry.
+        BackendError: If the backend's dependencies are not installed.
     """
-    if name not in BACKEND_REGISTRY:
-        available = ", ".join(sorted(BACKEND_REGISTRY.keys()))
+    if name not in _ENTRY_POINTS:
+        available = ", ".join(sorted(_ENTRY_POINTS.keys()))
         raise KeyError(f"Unknown backend: '{name}'. Available backends: {available}")
-    return BACKEND_REGISTRY[name]
+
+    ep = _ENTRY_POINTS[name]
+    try:
+        cls = ep.load()
+    except ImportError:
+        raise BackendError(
+            f"Backend '{name}' requires additional dependencies. "
+            f"Install with: pip install kilntainers[{_get_extra_for_backend(name)}]"
+        )
+
+    if not (isinstance(cls, type) and issubclass(cls, Backend)):
+        raise BackendError(f"Entry point '{name}' does not point to a Backend subclass")
+
+    return cls
+
+
+def get_available_backend_names() -> list[str]:
+    """Return names of all discovered backends (for --backend choices)."""
+    return sorted(_ENTRY_POINTS.keys())
+
+
+def _get_extra_for_backend(name: str) -> str:
+    """Return the pip extra name for a backend.
+
+    Maps backend names to their optional dependency group names.
+    """
+    extra_mapping = {
+        "wasm": "wasm",
+        "go_busybox": "wasm",
+        "modal": "modal",
+    }
+    return extra_mapping.get(name, "")

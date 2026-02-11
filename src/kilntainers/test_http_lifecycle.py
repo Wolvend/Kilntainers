@@ -7,10 +7,10 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from kilntainers.backends.test_docker_integration import validate_engine_available
 from kilntainers.backends.test_utils import MockBackend
 from kilntainers.config import BackendConfig, ServerConfig
 from kilntainers.server import create_lifespan, create_server
-from kilntainers.backends.test_docker_integration import validate_engine_available
 
 
 class TestHTTPLifespan:

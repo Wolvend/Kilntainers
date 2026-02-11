@@ -9,11 +9,32 @@ dependencies = [
     "modal>=1.3.2",
 ]
 
+[project.optional-dependencies]
+wasm = ["wasmtime>=41.0.0"]
+all = ["kilntainers[wasm]"]
+
 [project.scripts]
 kilntainers = "kilntainers.cli:main"
 
+[project.entry-points."kilntainers.backends"]
+docker = "kilntainers.backends.docker:DockerBackend"
+modal = "kilntainers.backends.modal:ModalBackend"
+wasm = "kilntainers.backends.wasm:WasmBackend"
+go_busybox = "kilntainers.backends.wasm:GoBusyBoxBackend"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/kilntainers"]
+
+[tool.hatch.build.targets.wasm-data]
+include = ["src/kilntainers/backends/wasm_data/*.wasm"]
+
 [tool.uv]
 package = true
+
+[tool.uv.sources]
+
+[tool.setuptools.package-data]
+"kilntainers.backends.wasm_data" = ["*.wasm"]
 
 [dependency-groups]
 dev = [
@@ -21,6 +42,7 @@ dev = [
     "pytest>=9.0.2",
     "pytest-asyncio>=0.26.0",
     "pytest-xdist>=3.6.0",
+    "wasmtime>=41.0.0",
 ]
 
 [tool.ty.src]

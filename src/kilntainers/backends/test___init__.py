@@ -2,7 +2,10 @@
 
 import pytest
 
-from kilntainers.backends import BACKEND_REGISTRY, get_backend_class
+from kilntainers.backends import (
+    get_available_backend_names,
+    get_backend_class,
+)
 from kilntainers.backends.docker import DockerBackend
 
 
@@ -11,8 +14,8 @@ class TestBackendRegistry:
 
     def test_registry_contains_docker(self) -> None:
         """Registry should contain Docker backend."""
-        assert "docker" in BACKEND_REGISTRY
-        assert BACKEND_REGISTRY["docker"] == DockerBackend
+        available = get_available_backend_names()
+        assert "docker" in available
 
     def test_get_backend_class_docker(self) -> None:
         """get_backend_class should return DockerBackend for 'docker'."""
@@ -30,4 +33,5 @@ class TestBackendRegistry:
             get_backend_class("unknown")
         error_msg = str(exc_info.value)
         assert "Available backends:" in error_msg
+        # At least docker should be available
         assert "docker" in error_msg
