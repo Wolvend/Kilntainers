@@ -2,7 +2,7 @@
 
 ## 1. Overview
 
-Kilntainers is an MCP server that gives LLM agents isolated Linux sandboxes for executing shell commands. It exposes a single tool — `shell_exec` — providing the full power of a Linux command line in an ephemeral, secure environment.
+Kilntainers is an MCP server that gives LLM agents isolated Linux sandboxes for executing shell commands. It exposes a single tool — `sandbox_exec` — providing the full power of a Linux command line in an ephemeral, secure environment.
 
 **Scope of this document:** External behavior — the MCP tool interface, server configuration, connection lifecycle, backend behavioral contract, and security model. Not an architecture or implementation document.
 
@@ -18,9 +18,9 @@ Kilntainers is an MCP server that gives LLM agents isolated Linux sandboxes for 
 
 ---
 
-## 2. MCP Tool: `shell_exec`
+## 2. MCP Tool: `sandbox_exec`
 
-Kilntainers exposes exactly one MCP tool: `shell_exec`. (D9)
+Kilntainers exposes exactly one MCP tool: `sandbox_exec`. (D9)
 
 ### 2.1 Input Schema
 
@@ -293,7 +293,7 @@ Every backend must support these operations:
 | **Start sandbox** | Create and start an isolated sandbox. Return a sandbox object for subsequent operations. Each call creates an independent sandbox. (D28) |
 | **Stop sandbox** | Stop the sandbox and release all resources. Must be idempotent — safe to call on an already-stopped sandbox. |
 | **Execute** | Run a command in a specific sandbox. Accepts either a `command` string or `args` array, plus optional `stdin`, `working_directory`, `timeout`, and `output_limit`. Returns `{stdout, stderr, exit_code, exec_duration_ms}`. |
-| **Tool instructions** | Return a description string for the `shell_exec` tool, or null. Used to explain the specific capabilities of this sandbox ("a debian linux box" or "a busybox with these limited commands ..."). If null, the server requires `--tool-instruction-override` or it fails to start. (D9, D16) |
+| **Tool instructions** | Return a description string for the `sandbox_exec` tool, or null. Used to explain the specific capabilities of this sandbox ("a debian linux box" or "a busybox with these limited commands ..."). If null, the server requires `--tool-instruction-override` or it fails to start. (D9, D16) |
 
 **Pythonic usage pattern:** The backend is an object; the sandbox it creates is also an object. Validate is a separate step because it may be async (e.g., checking if Docker is running). Start auto-validates if not already validated, so callers can't forget.
 
@@ -369,7 +369,7 @@ This ensures the interface won't need breaking changes when the mapped working d
 
 ## 6. Tool Description Assembly
 
-The `shell_exec` tool's `description` field — the text the LLM sees — is assembled at startup from up to three sources. (D16)
+The `sandbox_exec` tool's `description` field — the text the LLM sees — is assembled at startup from up to three sources. (D16)
 
 **Assembly rules:**
 
@@ -492,7 +492,7 @@ kilntainers \
 
 *Note: this is just a draft we can refine later*
 
-*Note: `--gpu` and authentication are hypothetical examples of backend-specific flat args (D12). The MCP tool interface (`shell_exec` with the same parameters and response schema) is identical across backends. Only the backend's tool description changes to reflect the environment.*
+*Note: `--gpu` and authentication are hypothetical examples of backend-specific flat args (D12). The MCP tool interface (`sandbox_exec` with the same parameters and response schema) is identical across backends. Only the backend's tool description changes to reflect the environment.*
 
 ---
 

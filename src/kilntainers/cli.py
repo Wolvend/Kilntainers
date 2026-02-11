@@ -95,7 +95,7 @@ def build_parser() -> argparse.ArgumentParser:
     desc.add_argument(
         "--tool-instruction-override",
         default=None,
-        help="Replace the entire shell_exec tool description",
+        help="Replace the entire sandbox_exec tool description",
     )
     desc.add_argument(
         "--extended-tool-instruction",

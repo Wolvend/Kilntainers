@@ -124,7 +124,7 @@ class TestE2EStdioProtocol:
 
                 tools = response["result"].get("tools", [])
                 assert len(tools) == 1
-                assert tools[0]["name"] == "shell_exec"
+                assert tools[0]["name"] == "sandbox_exec"
                 assert "description" in tools[0]
 
             finally:
@@ -192,7 +192,7 @@ class TestE2EStdioProtocol:
                     "id": 2,
                     "method": "tools/call",
                     "params": {
-                        "name": "shell_exec",
+                        "name": "sandbox_exec",
                         "arguments": {"command": "echo hello world"},
                     },
                 }
@@ -285,7 +285,7 @@ class TestE2EErrorHandling:
                     "id": 2,
                     "method": "tools/call",
                     "params": {
-                        "name": "shell_exec",
+                        "name": "sandbox_exec",
                         "arguments": {"command": "ls", "args": ["/bin/ls"]},
                     },
                 }

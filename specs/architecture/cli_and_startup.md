@@ -183,7 +183,7 @@ def build_parser() -> argparse.ArgumentParser:
     desc.add_argument(
         "--tool-instruction-override",
         default=None,
-        help="Replace the entire shell_exec tool description",
+        help="Replace the entire sandbox_exec tool description",
     )
     desc.add_argument(
         "--extended-tool-instruction",
@@ -589,7 +589,7 @@ core options:
 
 tool description:
   --tool-instruction-override TOOL_INSTRUCTION_OVERRIDE
-                        Replace the entire shell_exec tool description
+                        Replace the entire sandbox_exec tool description
   --extended-tool-instruction EXTENDED_TOOL_INSTRUCTION
                         Append to the backend's default tool description
 

@@ -40,7 +40,7 @@ def assemble_tool_description(
     override: str | None,
     extended: str | None,
 ) -> str:
-    """Assemble the shell_exec tool description.
+    """Assemble the sandbox_exec tool description.
 
     Raises BackendError if the result would be empty.
 
@@ -211,16 +211,16 @@ def _validate_inputs(
 
 
 def _create_handler(config: ServerConfig) -> Callable:
-    """Create the shell_exec handler with server config bound via closure.
+    """Create the sandbox_exec handler with server config bound via closure.
 
     Args:
         config: The server configuration containing defaults.
 
     Returns:
-        An async handler function for the shell_exec tool.
+        An async handler function for the sandbox_exec tool.
     """
 
-    async def shell_exec_handler(
+    async def sandbox_exec_handler(
         command: str | None = None,
         args: list[str] | None = None,
         stdin: str | None = None,
@@ -228,7 +228,7 @@ def _create_handler(config: ServerConfig) -> Callable:
         timeout: int | None = None,
         ctx: Context[ServerSession, SessionContext] | None = None,
     ) -> CallToolResult:
-        """Handle a shell_exec tool call.
+        """Handle a sandbox_exec tool call.
 
         Args:
             command: Shell command string (mutually exclusive with args).
@@ -295,7 +295,7 @@ def _create_handler(config: ServerConfig) -> Callable:
             isError=False,
         )
 
-    return shell_exec_handler
+    return sandbox_exec_handler
 
 
 # --- Server Factory ---
@@ -339,7 +339,7 @@ def create_server(
     handler = _create_handler(config)
     mcp.add_tool(
         handler,
-        name="shell_exec",
+        name="sandbox_exec",
         description=description,
     )
 

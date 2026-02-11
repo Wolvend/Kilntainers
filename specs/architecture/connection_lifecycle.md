@@ -41,7 +41,7 @@ Process starts
   │       │     └── Yield SessionContext
   │       │
   │       ├── Accept MCP messages (tools/list, tools/call)
-  │       │     └── Each tools/call → shell_exec_handler → sandbox.exec()
+  │       │     └── Each tools/call → sandbox_exec_handler → sandbox.exec()
   │       │
   │       └── Shutdown trigger (stdin EOF / SIGTERM / sandbox death)
   │             ├── Lifespan exits
@@ -495,7 +495,7 @@ def create_server(
     )
 
     handler = _create_handler(config)
-    mcp.add_tool(handler, name="shell_exec", description=description)
+    mcp.add_tool(handler, name="sandbox_exec", description=description)
 
     return mcp
 ```
