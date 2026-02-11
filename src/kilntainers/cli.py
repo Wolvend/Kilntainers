@@ -5,6 +5,7 @@ import asyncio
 import os
 import signal
 import sys
+import threading
 from typing import NoReturn
 
 from kilntainers.backends import (
@@ -320,7 +321,18 @@ def main() -> None:
     # Register SIGTERM handler to convert to SIGINT for clean shutdown
     # FastMCP handles SIGINT (Ctrl+C) gracefully, so we redirect SIGTERM to the same path
     def _handle_sigterm(signum: int, frame: object) -> None:
-        """Convert SIGTERM to SIGINT for clean shutdown."""
+        """
+        Convert SIGTERM to SIGINT for clean shutdown (triggers mcp library graceful shutdown).
+
+        Watchdog timmer needed as `mcp` library doesn't exit on SIGTERM.
+
+        `mcp` library is adding sigterm support, but not in a release yet.
+        """
+        # Schedule forced exit as fallback in case graceful shutdown hangs.
+        # Uses a daemon thread so it won't block normal exit if shutdown succeeds.
+        timer = threading.Timer(5.0, lambda: os._exit(0))
+        timer.daemon = True
+        timer.start()
         os.kill(os.getpid(), signal.SIGINT)
 
     signal.signal(signal.SIGTERM, _handle_sigterm)
