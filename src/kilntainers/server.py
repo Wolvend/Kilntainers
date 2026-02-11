@@ -7,11 +7,12 @@ import signal
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
-from typing import AsyncContextManager
+from typing import Annotated, Any, AsyncContextManager
 
 from mcp.server.fastmcp import Context, FastMCP
 from mcp.server.session import ServerSession
 from mcp.types import CallToolResult, TextContent
+from pydantic import Field
 
 from kilntainers.backends.base import Backend, ExecRequest, Sandbox
 from kilntainers.config import ServerConfig
@@ -210,7 +211,7 @@ def _validate_inputs(
 # --- Tool Handler ---
 
 
-def _create_handler(config: ServerConfig) -> Callable:
+def _create_handler(config: ServerConfig) -> Callable[..., Any]:
     """Create the sandbox_exec handler with server config bound via closure.
 
     Args:
@@ -335,10 +336,43 @@ def create_server(
         port=config.port,
     )
 
-    # Bind server config for the handler via closure
     handler = _create_handler(config)
+
+    # Wrapper closure for better MCP type hinting
+    # type ignore and noqa needed to get the right type hints. Type hinting doesn't work for Optional[str] so str but assign None as default.
+    async def sandbox_exec(
+        command: Annotated[
+            str,  # noqa: RUF013
+            Field(description="Shell command string (mutually exclusive with args)."),
+        ] = None,  # type: ignore
+        args: Annotated[
+            list[str],  # noqa: RUF013
+            Field(
+                description="List of arguments for direct execution (mutually exclusive with command)."
+            ),
+        ] = None,  # type: ignore
+        stdin: Annotated[str, Field(description="Content to pipe to stdin.")] = None,  # type: ignore # noqa: RUF013
+        working_directory: Annotated[
+            str,  # noqa: RUF013
+            Field(description="Working directory for the command (must be absolute)."),
+        ] = None,  # type: ignore
+        timeout: Annotated[
+            int,  # noqa: RUF013
+            Field(description="Timeout in seconds (defaults to server config)."),
+        ] = None,  # type: ignore
+        ctx: Context[ServerSession, SessionContext] | None = None,
+    ) -> CallToolResult:
+        return await handler(
+            command=command,
+            args=args,
+            stdin=stdin,
+            working_directory=working_directory,
+            timeout=timeout,
+            ctx=ctx,
+        )
+
     mcp.add_tool(
-        handler,
+        sandbox_exec,
         name="sandbox_exec",
         description=description,
     )
