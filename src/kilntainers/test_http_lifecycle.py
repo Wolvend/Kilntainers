@@ -7,6 +7,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from kilntainers.backends.test_docker_integration import validate_engine_available
 from kilntainers.backends.test_utils import MockBackend
 from kilntainers.config import BackendConfig, ServerConfig
 from kilntainers.server import create_lifespan, create_server
@@ -133,6 +134,9 @@ class TestHTTPSessionIsolation:
 
         from mcp.client.session import ClientSession
         from mcp.client.streamable_http import streamable_http_client
+
+        # Skip if docker is not available
+        validate_engine_available("docker")
 
         # Start HTTP server as subprocess (use random port to avoid conflicts)
         server_proc = await asyncio.create_subprocess_exec(

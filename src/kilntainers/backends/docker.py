@@ -80,17 +80,6 @@ class DockerBackend(Backend):
             help="Docker image (default: debian:bookworm-slim)",
         )
         group.add_argument(
-            "--shell",
-            default="/bin/bash",
-            help="Shell binary for command mode (default: /bin/bash)",
-        )
-        group.add_argument(
-            "--network",
-            action="store_true",
-            default=False,
-            help="Enable network access in sandboxes (default: disabled)",
-        )
-        group.add_argument(
             "--cpu",
             default=None,
             help='Docker CPU limit (e.g., "1.5")',
@@ -114,11 +103,13 @@ class DockerBackend(Backend):
     @classmethod
     def config_from_args(cls, args: argparse.Namespace) -> BackendConfig:
         """Build DockerBackendConfig from parsed CLI arguments."""
+        # Use core --shell with a backend-specific default
+        shell = args.shell if args.shell is not None else "/bin/bash"
         return DockerBackendConfig(
             engine=args.engine,
             host=args.docker_host,
             image=args.image,
-            shell=args.shell,
+            shell=shell,
             network_enabled=args.network,
             cpu=args.cpu,
             memory=args.memory,

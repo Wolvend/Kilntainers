@@ -22,17 +22,32 @@ from kilntainers.backends.docker import (
 )
 from kilntainers.errors import BackendError, SandboxDiedError
 
-_engine_cache: dict[str, bool] = {}
+# Cache to track if a docker-like CLI is available and the daemon is running.
+_engine_available_cache: dict[str, bool] = {}
 
 
 def validate_engine_available(engine: str) -> None:
-    """Validate that the engine CLI is installed and the daemon is running."""
-    available = _engine_cache.get(engine, None)
+    """Validate that the engine CLI is installed and the daemon is running, skipping the test if not."""
+    available = _engine_available_cache.get(engine, None)
+
     if available is None:
-        available = shutil.which(engine) is not None
+        available = _check_engine_available(engine)
+        _engine_available_cache[engine] = available
 
     if not available:
         pytest.skip(f"{engine} CLI not installed")
+
+
+def _check_engine_available(engine: str) -> bool:
+    """Check if the engine CLI is installed and the daemon is running."""
+    command_available = shutil.which(engine) is not None
+    if not command_available:
+        return False
+    try:
+        result = subprocess.run([engine, "info"], capture_output=True, text=True)
+        return result.returncode == 0
+    except subprocess.CalledProcessError:
+        return False
 
 
 async def get_docker_backend(engine: str) -> DockerBackend:

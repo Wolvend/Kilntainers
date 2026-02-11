@@ -106,12 +106,14 @@ class ModalBackend(Backend):
     @classmethod
     def config_from_args(cls, args: argparse.Namespace) -> BackendConfig:
         """Build ModalBackendConfig from parsed CLI arguments."""
+        # Use core --shell with a backend-specific default
+        shell = args.shell if args.shell is not None else "/bin/bash"
         return ModalBackendConfig(
             token_id=args.modal_token_id,
             token_secret=args.modal_token_secret,
             app_name=args.modal_app_name,
             image=args.image,
-            shell=args.shell,
+            shell=shell,
             network_enabled=args.network,
             cpu=args.modal_cpu,
             memory=args.modal_memory,

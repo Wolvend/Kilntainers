@@ -34,6 +34,10 @@ How stdio and Streamable HTTP transports map to sandbox lifecycles: stdio runs o
 
 How the Modal backend implements the abstraction layer using the Modal Python SDK: token-based authentication, `modal.Image` construction (debian_slim default, `from_registry` for custom images), sandbox creation with resource configuration (CPU, memory, GPU, region), readiness verification, command execution with server-side timeout enforcement and client-side output limit monitoring via `asyncio.TaskGroup`, stdin piping through Modal's `StreamWriter`, sandbox death detection (`sb.wait.aio()`), stop via `terminate()`, network isolation (`block_network`), sandbox lifetime management, and the optional dependency pattern for the `modal` package.
 
+### [WASM Backend Implementation](wasm_backend.md)
+
+How the WASM backend implements the abstraction layer using the wasmtime Python package for in-process WebAssembly execution: entry-point-based backend discovery (replacing the hard-coded registry), `WasmBackend` and `WasmSandbox` classes, the `GoBusyBoxBackend` subclass with a bundled `busybox.wasm` binary, file-based I/O capture, epoch-based timeout interruption, post-execution output limit enforcement, temp-directory-as-filesystem model, WASI configuration, resource limits (memory, fuel), optional dependency packaging (`kilntainers[wasm]`), and the `--shell` integration for command mode support.
+
 ### [Phase 7: Error Handling & Observability](error_handling.md)
 
 The complete error handling architecture: exception hierarchy (`KilntainersError` → `BackendError` / `SandboxDiedError`), the ExecResult-vs-exception boundary (limit conditions are results, not errors), startup error propagation (stderr + exit codes), runtime error propagation (input validation → `isError: true`, exec results → `isError: false`, sandbox death → `isError: true` + connection drop), unexpected exception catch-all, stderr usage patterns, the "great errors, no logs" observability strategy (D31), error message quality guidelines for both operators and LLM agents, and Docker backend error handling details.

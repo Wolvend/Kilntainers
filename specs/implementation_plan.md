@@ -150,3 +150,9 @@ Add Streamable HTTP support with per-session sandbox management. Deferred until 
 - [connection_lifecycle.md](architecture/connection_lifecycle.md) §3–§5, §7.3, §9
 - [mcp_server.md](architecture/mcp_server.md) §5.2 (Streamable HTTP wiring)
 - [cli_and_startup.md](architecture/cli_and_startup.md) §4.2 (HTTP-only arg detection)
+
+---
+
+## Phase 9: WASM backend
+
+ - [x] Implement the plan described in `specs/architecture/wasm_backend.md`
