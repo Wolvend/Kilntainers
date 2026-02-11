@@ -134,7 +134,7 @@ class WasmBackend(Backend):
         if wasmtime is None:
             raise BackendError(
                 "WASM backend requires the 'wasmtime' package. "
-                "Install with: pip install kilntainers[wasm]"
+                "Install with: uv add kilntainers[wasm]"
             )
 
         # Check .wasm file exists

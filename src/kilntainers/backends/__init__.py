@@ -46,7 +46,7 @@ def get_backend_class(name: str) -> type[Backend]:
     except ImportError:
         raise BackendError(
             f"Backend '{name}' requires additional dependencies. "
-            f"Install with: pip install kilntainers[{_get_extra_for_backend(name)}]"
+            f"Install with: uv add kilntainers[{_get_extra_for_backend(name)}]"
         )
 
     if not (isinstance(cls, type) and issubclass(cls, Backend)):

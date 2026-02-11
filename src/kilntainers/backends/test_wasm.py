@@ -263,7 +263,7 @@ class TestWasmBackendValidation:
             await backend.validate()
 
         assert "wasmtime" in str(exc_info.value)
-        assert "pip install" in str(exc_info.value)
+        assert "uv add" in str(exc_info.value)
 
     @pytest.mark.asyncio
     async def test_validate_wasm_file_not_found(self, mock_wasmtime):

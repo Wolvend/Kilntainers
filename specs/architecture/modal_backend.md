@@ -956,7 +956,7 @@ class ModalBackend(Backend):
         if modal is None:
             raise BackendError(
                 "Modal backend requires the 'modal' package. "
-                "Install it with: pip install kilntainers[modal]"
+                "Install it with: uv add kilntainers[modal]"
             )
         super().__init__()
         self._config = config

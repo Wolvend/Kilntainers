@@ -457,7 +457,7 @@ kilntainers \
   --network \
   --timeout 300 \
   --memory 4g \
-  --tool-instruction-override "A Debian linux sandbox running bash. This sandbox includes Python 3.12 with numpy, pandas, matplotlib, scipy, and scikit-learn pre-installed. Network access is enabled — you can pip install additional packages or download datasets with curl/wget."
+  --tool-instruction-override "A Debian linux sandbox running bash. This sandbox includes Python 3.12 with numpy, pandas, matplotlib, scipy, and scikit-learn pre-installed. Network access is enabled — you can uv add additional packages or download datasets with curl/wget."
 ```
 
 **Tool description seen by the LLM:** the tool-instruction-override param, nothing else

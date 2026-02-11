@@ -43,7 +43,7 @@ Counter-argument: simplicity is a feature, and multi-sandbox is a different prod
 
 Network disabled by default is good security. But many practical agent tasks need network:
 
-- `pip install`, `npm install`, `apt-get install` -- all need network.
+- `uv add`, `npm install`, `apt-get install` -- all need network.
 - Fetching URLs, calling APIs, downloading datasets.
 - The base image must be *very* complete if agents can't install anything.
 

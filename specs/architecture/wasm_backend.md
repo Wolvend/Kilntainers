@@ -29,7 +29,7 @@ All WASM execution happens **in-process** via the `wasmtime` Python package. Unl
 | Death detection | `docker wait` | `sb.wait.aio()` | Not applicable (no persistent process) |
 | Timeout enforcement | Client-side (`asyncio.wait_for`) | Server-side + client safety net | Epoch-based interruption (in-process) |
 | Network | `--network none` | `block_network=True` | WASI-level (limited by WASI preview support) |
-| Install | Docker daemon required | Modal account + SDK | `pip install kilntainers[wasm]` |
+| Install | Docker daemon required | Modal account + SDK | `uv add kilntainers[wasm]` |
 
 This backend also introduces **entry-point-based backend discovery** (§2), replacing the hard-coded backend registry. This enables the WASM backend to be an optional dependency while remaining discoverable by the CLI.
 
@@ -102,7 +102,7 @@ def get_backend_class(name: str) -> type[Backend]:
     except ImportError:
         raise BackendError(
             f"Backend '{name}' requires additional dependencies. "
-            f"Install with: pip install kilntainers[wasm]"
+            f"Install with: uv add kilntainers[wasm]"
         )
 
     if not (isinstance(cls, type) and issubclass(cls, Backend)):
@@ -123,7 +123,7 @@ def get_available_backend_names() -> list[str]:
 - **`_discover_entry_points()`** runs at import time but is fast — it reads installed package metadata without importing any backend modules.
 - **`get_backend_class()`** lazy-loads the entry point on first access. The `ep.load()` call imports the module and resolves the class. If the module's dependencies are missing (e.g., `wasmtime` not installed), `ImportError` is caught and converted to an actionable `BackendError`.
 - **Type checking** after load ensures the entry point actually points to a `Backend` subclass. This catches misconfigured entry points early.
-- **Error messages** guide the user to install the right extra. For WASM backends, the message says `pip install kilntainers[wasm]`.
+- **Error messages** guide the user to install the right extra. For WASM backends, the message says `uv add kilntainers[wasm]`.
 
 ### 2.4 CLI Integration
 
@@ -161,13 +161,13 @@ def build_parser() -> argparse.ArgumentParser:
 
 - `--backend` choices still include `wasm` and `go_busybox` (visible in `--help`).
 - WASM-specific CLI args (`--wasm-path`, etc.) are not shown (their backend class can't be loaded).
-- Selecting `--backend wasm` produces: `"Backend 'wasm' requires additional dependencies. Install with: pip install kilntainers[wasm]"`.
+- Selecting `--backend wasm` produces: `"Backend 'wasm' requires additional dependencies. Install with: uv add kilntainers[wasm]"`.
 
 ### 2.5 Migration of Existing Backends
 
 Docker and Modal backends move from hard-coded imports to entry point registration. The only code change is in `backends/__init__.py` (replace the hard-coded dict with discovery logic) and `pyproject.toml` (add entry points). The backend classes themselves are unchanged.
 
-**Note:** The `modal` package should also move to `[project.optional-dependencies]` as part of this change, making it installable via `pip install kilntainers[modal]`. This is a separate task but naturally follows from the entry point architecture.
+**Note:** The `modal` package should also move to `[project.optional-dependencies]` as part of this change, making it installable via `uv add kilntainers[modal]`. This is a separate task but naturally follows from the entry point architecture.
 
 ---
 
@@ -338,7 +338,7 @@ async def _validate(self) -> None:
     if wasmtime is None:
         raise BackendError(
             "WASM backend requires the 'wasmtime' package. "
-            "Install with: pip install kilntainers[wasm]"
+            "Install with: uv add kilntainers[wasm]"
         )
 
     # 2. Check .wasm file exists
@@ -1145,7 +1145,7 @@ def tool_instructions(self) -> str | None:
 wasm = ["wasmtime"]
 ```
 
-Install with: `pip install kilntainers[wasm]` or `uv add kilntainers[wasm]`.
+Install with: `uv add kilntainers[wasm]` or `uv add kilntainers[wasm]`.
 
 The `wasmtime` Python package includes the wasmtime runtime — no external binary installation needed. This makes `kilntainers[wasm]` fully self-contained.
 
@@ -1432,6 +1432,6 @@ Consider adding a `BUSYBOX_VERSION` constant to track the bundled version.
 
 ### 12.6 Entry Point Discovery and Development Mode
 
-Entry points require the package to be installed (not just on `sys.path`). During development with `uv` or `pip install -e .`, the package is installed in editable mode and entry points are registered. Running the module directly without installation (e.g., `python -m kilntainers`) will not discover entry-point-registered backends.
+Entry points require the package to be installed (not just on `sys.path`). During development with `uv` or `uv add .`, the package is installed in editable mode and entry points are registered. Running the module directly without installation (e.g., `python -m kilntainers`) will not discover entry-point-registered backends.
 
 This is consistent with the existing project setup — the `pyproject.toml` already configures `[project.scripts]` which requires installation.

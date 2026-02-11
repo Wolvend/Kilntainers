@@ -191,8 +191,8 @@ This is useful when the package is installed in an environment where console_scr
 
 The distribution story matters more for Python than for Go (acknowledged in D1). Supported installation methods, in priority order:
 
-1. **`uvx kilntainers`** — zero-install execution via `uv`. Becoming the common pattern for MCP servers.
-2. **`pip install kilntainers`** / **`pipx install kilntainers`** — traditional distribution via PyPI. `pipx` is recommended for CLI tools since it creates an isolated environment.
+1. **`uv tool install kilntainers`** — recommended execution via `uv`. Becoming the common pattern for MCP servers.
+`uv add kilntainers` / **`pip install kilntainers`** / **`pipx install kilntainers`** — traditional distribution via PyPI. `pipx` is recommended for CLI tools since it creates an isolated environment. `uv add kilntainers` is recommended for adding to a project.
 3. **Development install** — `uv sync` from the repo root for contributors (installs all deps including dev into a local venv).
 
 Docker-image-of-the-server-itself is a potential future distribution method but not in v1 scope.
