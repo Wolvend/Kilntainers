@@ -1,7 +1,6 @@
 """CLI argument parsing and main entry point."""
 
 import argparse
-import asyncio
 import os
 import signal
 import sys
@@ -12,7 +11,6 @@ from kilntainers.backends import (
     get_available_backend_names,
     get_backend_class,
 )
-from kilntainers.backends.base import Backend
 from kilntainers.config import BackendConfig, ServerConfig
 from kilntainers.errors import BackendError
 from kilntainers.server import create_server
@@ -235,10 +233,10 @@ async def _async_main(
     backend_config: BackendConfig,
     backend_name: str,
 ) -> None:
-    """Async startup: validate backend, build server, run.
+    """Async startup: build server, run.
 
     This function performs all async startup operations:
-    - Creates and validates the backend
+    - Creates the backend (validation happens lazily)
     - Creates the MCP server
     - Runs the transport (blocking until shutdown)
 
@@ -248,15 +246,11 @@ async def _async_main(
         backend_name: Name of the backend to use.
 
     Raises:
-        SystemExit: If backend validation or server creation fails.
+        SystemExit: If server creation fails.
     """
-    # Create and validate backend
+    # Create backend (validation happens lazily on first sandbox_exec)
     backend_class = get_backend_class(backend_name)
     backend = backend_class(backend_config)
-    try:
-        await backend.validate()
-    except BackendError as e:
-        _startup_error(str(e))
 
     # Create the MCP server (assembles tool description, registers tool)
     try:
@@ -269,18 +263,6 @@ async def _async_main(
     mcp.run(transport=transport)
 
 
-def _validate_backend(backend: Backend) -> None:
-    """Validate the backend synchronously.
-
-    Args:
-        backend: The backend instance to validate.
-
-    Raises:
-        BackendError: If backend validation fails.
-    """
-    asyncio.run(backend.validate())
-
-
 def main() -> None:
     """CLI entry point. Parses args, configures, and runs the server.
 
@@ -288,7 +270,7 @@ def main() -> None:
     1. Parses CLI arguments
     2. Builds configuration objects
     3. Validates configuration constraints
-    4. Creates and validates the backend
+    4. Creates the backend (validation happens lazily on first exec)
     5. Creates and runs the MCP server
 
     Never returns normally (exits on KeyboardInterrupt or server shutdown).
@@ -299,14 +281,10 @@ def main() -> None:
     server_config, backend_config = build_configs(args)
     validate_config(server_config)
 
-    # Create and validate backend (async, run in its own event loop)
+    # Create backend (validation happens lazily on first sandbox_exec)
     backend_name = args.backend
     backend_class = get_backend_class(backend_name)
     backend = backend_class(backend_config)
-    try:
-        _validate_backend(backend)
-    except BackendError as e:
-        _startup_error(str(e))
 
     # Create the MCP server (assembles tool description, registers tool)
     try:

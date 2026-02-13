@@ -29,24 +29,30 @@ Both models use the same underlying mechanism: FastMCP's **lifespan context mana
 Process starts
   │
   ├── 1. Parse CLI args, validate config          (Phase 5)
-  ├── 2. Create + validate backend                (Phase 5)
+  ├── 2. Create backend (no validation yet)       (Phase 5)
   ├── 3. Assemble tool description                (Phase 4)
   ├── 4. Create FastMCP server                    (Phase 4)
   │
   ├── 5. mcp.run(transport="stdio")               ← blocks
   │       │
   │       ├── Lifespan enters
-  │       │     ├── Create sandbox (pull → run → readiness check)
-  │       │     ├── Start death monitor task
-  │       │     └── Yield SessionContext
+  │       │     └── Yield SessionContext (no sandbox yet — lazy creation)
   │       │
   │       ├── Accept MCP messages (tools/list, tools/call)
-  │       │     └── Each tools/call → sandbox_exec_handler → sandbox.exec()
+  │       │     ├── tools/list → responds immediately (no sandbox needed)
+  │       │     └── First tools/call sandbox_exec:
+  │       │           ├── get_or_create_sandbox()
+  │       │           │     ├── backend.validate() (cached after first success)
+  │       │           │     ├── Create sandbox (pull → run → readiness check)
+  │       │           │     └── Start death monitor task
+  │       │           └── sandbox.exec()
+  │       │     └── Subsequent tools/call → sandbox.exec() (sandbox already exists)
   │       │
   │       └── Shutdown trigger (stdin EOF / SIGTERM / sandbox death)
   │             ├── Lifespan exits
-  │             │     ├── Cancel death monitor task
-  │             │     └── sandbox.stop()
+  │             │     └── SessionContext.cleanup()
+  │             │           ├── Cancel death monitor task (if started)
+  │             │           └── sandbox.stop() (if sandbox was created)
   │             └── Return from mcp.run()
   │
   └── Process exits
@@ -54,12 +60,14 @@ Process starts
 
 ### 2.2 One Sandbox, One Session
 
-In stdio mode, there is exactly one sandbox for the entire server process. The lifespan enters when `mcp.run()` starts (before accepting any messages) and exits when the transport shuts down.
+In stdio mode, there is exactly one sandbox for the entire server process. The lifespan enters when `mcp.run()` starts and exits when the transport shuts down. However, **sandbox creation is lazy** — the sandbox is not created until the first `sandbox_exec` call.
 
 This means:
-- **Image pull blocks startup.** The first `tools/list` or `tools/call` from the client is not received until the sandbox is ready. Image pull progress goes to stderr, which the MCP client can display to the user.
+- **`tools/list` responds immediately.** No sandbox creation is needed for non-exec requests. The server accepts MCP connections as soon as the lifespan enters.
+- **Image pull blocks the first `sandbox_exec`.** The first `sandbox_exec` call creates the sandbox, which may include an image pull. Image pull progress goes to stderr, which the MCP client can display to the user.
 - **No session ID.** The MCP stdio transport does not have session identifiers — there's one implicit session.
-- **Sandbox creation failure = process exit.** If the sandbox can't be created (image pull failure, Docker not running), the lifespan raises an exception, `mcp.run()` exits, and the process terminates with an error on stderr.
+- **Sandbox creation failure = exec error, not process exit.** If the sandbox can't be created (image pull failure, Docker not running), the `sandbox_exec` call returns an MCP error (`isError: true`). The session remains alive — subsequent `sandbox_exec` calls will retry creation. Once a sandbox is created successfully, it is used for all future calls.
+- **No sandbox if no exec.** If the session ends without any `sandbox_exec` calls, no sandbox is ever created and no container resources are consumed.
 
 ### 2.3 Shutdown Triggers
 
@@ -112,13 +120,14 @@ When an MCP client sends an `initialize` request over HTTP, the SDK's `Streamabl
 
 1. A new `Mcp-Session-Id` is generated and returned in the response headers.
 2. A new lifespan context is entered for this session.
-3. The lifespan creates a sandbox (`backend.create_sandbox()`).
-4. The lifespan starts a death monitor task.
-5. The session is ready to accept tool calls.
+3. The lifespan yields a `SessionContext` with lazy sandbox creation (no sandbox created yet).
+4. The session is ready to accept tool calls.
 
-**Sandbox creation blocks the `initialize` response.** The client does not receive the session ID until the sandbox is ready (image pulled, container started, readiness verified). For the first session after server start, this may include an image pull. Subsequent sessions typically start faster (image is cached).
+**`initialize` completes immediately.** No sandbox is created during session initialization. The client receives the session ID without waiting for container startup.
 
-**Concurrent session creation.** Multiple clients can connect simultaneously. Each `initialize` triggers an independent `backend.create_sandbox()` call. The backend is safe for concurrent use (Phase 2 §8).
+**Sandbox creation happens on first `sandbox_exec`.** When the first `sandbox_exec` tool call arrives for the session, `SessionContext.get_or_create_sandbox()` creates the sandbox (validate backend, pull image, start container, readiness check). The sandbox is then used for all subsequent `sandbox_exec` calls in the session.
+
+**Concurrent session creation.** Multiple clients can connect simultaneously. Each session has its own lazy `SessionContext`. Sandbox creation within each session is concurrency-safe — if multiple `sandbox_exec` calls arrive simultaneously, only one sandbox is created per session.
 
 ### 3.3 Session Identification
 
@@ -220,13 +229,13 @@ HTTP session 2 ──→  sandbox C  ──→     container C
 
 ### 5.2 Sandbox Lifetime
 
-A sandbox's lifetime is exactly bounded by its session's lifespan context:
+A sandbox's lifetime is bounded by its session's lifespan context, but creation is lazy:
 
-- **Created:** When the lifespan context is entered (session initialization).
-- **Alive:** For the duration of the session. Accepts exec calls.
-- **Destroyed:** When the lifespan context exits (session teardown), via `sandbox.stop()`.
+- **Created:** On the first `sandbox_exec` call within the session (lazy, not on session initialization).
+- **Alive:** From creation until the session ends. Accepts exec calls.
+- **Destroyed:** When the lifespan context exits (session teardown), via `SessionContext.cleanup()` → `sandbox.stop()`. If no sandbox was ever created, cleanup is a no-op.
 
-No sandbox exists without a session. No session exists without a sandbox (creation failure prevents the session from starting).
+A session can exist without a sandbox (before the first `sandbox_exec` or if no `sandbox_exec` is ever called). Once a sandbox is created, it belongs exclusively to that session.
 
 ### 5.3 Backend Lifetime
 
@@ -266,34 +275,29 @@ The "during exec" path is handled by the tool handler (Phase 4 §3.3). The "betw
 
 ### 6.3 Death Propagation: stdio
 
-When the death_task completes in stdio mode, the entire process must shut down:
+When the death_task completes in stdio mode, the entire process must shut down. The death task is started by `SessionContext._start_death_monitor()` when the sandbox is lazily created (see §8.1). If no sandbox is ever created, there is no death task and no death propagation.
+
+The death monitor within `SessionContext._start_death_monitor()` sends SIGTERM to the current process:
 
 ```python
-@asynccontextmanager
-async def app_lifespan(server: FastMCP) -> AsyncIterator[SessionContext]:
-    sandbox = await backend.create_sandbox()
-
-    async def _on_death():
-        """Called when sandbox dies unexpectedly. Triggers process shutdown."""
-        await sandbox.wait_for_death()
-        # Sandbox died — terminate the process.
-        # Sending SIGTERM to ourselves triggers the normal shutdown path:
-        # asyncio cancellation → lifespan exit → cleanup.
-        os.kill(os.getpid(), signal.SIGTERM)
-
-    death_task = asyncio.create_task(_on_death())
-    try:
-        yield SessionContext(sandbox=sandbox, death_task=death_task)
-    finally:
-        death_task.cancel()
+def _start_death_monitor(self, sandbox: Sandbox) -> None:
+    async def _monitor_death() -> None:
         try:
-            await death_task
+            await sandbox.wait_for_death()
         except asyncio.CancelledError:
+            raise
+        except Exception:
             pass
-        await sandbox.stop()
+        if self._transport == "stdio":
+            if self._death_callback is not None:
+                self._death_callback()
+            else:
+                os.kill(os.getpid(), signal.SIGTERM)
+
+    self._death_task = asyncio.create_task(_monitor_death())
 ```
 
-**Why SIGTERM:** Sending SIGTERM to the process itself reuses the existing graceful shutdown path — asyncio cancels all tasks, the lifespan's `finally` block runs, the sandbox is stopped. This avoids duplicating shutdown logic or fighting with the SDK's event loop. It's the same signal that an MCP client sends when it wants the server to stop.
+**Why SIGTERM:** Sending SIGTERM to the process itself reuses the existing graceful shutdown path — asyncio cancels all tasks, the lifespan's `finally` block runs, `SessionContext.cleanup()` is called. This avoids duplicating shutdown logic or fighting with the SDK's event loop. It's the same signal that an MCP client sends when it wants the server to stop.
 
 **Race condition:** If SIGTERM arrives while an exec is in-flight, the exec is cancelled (asyncio cancellation). The in-flight exec does not return a result — the client is about to lose the connection anyway. This matches the functional spec: "In-flight exec is killed immediately" (§4.4).
 
@@ -351,23 +355,27 @@ After sandbox death is detected (by either path):
 
 ### 7.2 Session Shutdown Sequence
 
-When a single session ends (any trigger), the lifespan's `finally` block executes:
+When a single session ends (any trigger), the lifespan's `finally` block executes `SessionContext.cleanup()`:
 
 ```
 Session shutdown triggered
   │
-  ├── 1. Cancel death monitor task
-  │     └── death_task.cancel() → CancelledError → docker wait subprocess killed
-  │
-  ├── 2. Stop sandbox
-  │     ├── sandbox.stop()
-  │     │     ├── Set _stop_requested flag
-  │     │     ├── docker stop -t 5 <container_id>
-  │     │     │     └── SIGTERM → 5s grace → SIGKILL
-  │     │     └── Container removed (--rm flag)
+  ├── SessionContext.cleanup()
   │     │
-  │     └── If stop takes >10s → docker stop subprocess killed
-  │           └── Container may be orphaned (labeled for manual cleanup)
+  │     ├── 1. Cancel death monitor task (if sandbox was created)
+  │     │     └── death_task.cancel() → CancelledError → docker wait subprocess killed
+  │     │
+  │     ├── 2. Stop sandbox (if sandbox was created)
+  │     │     ├── sandbox.stop()
+  │     │     │     ├── Set _stop_requested flag
+  │     │     │     ├── docker stop -t 5 <container_id>
+  │     │     │     │     └── SIGTERM → 5s grace → SIGKILL
+  │     │     │     └── Container removed (--rm flag)
+  │     │     │
+  │     │     └── If stop takes >10s → docker stop subprocess killed
+  │     │           └── Container may be orphaned (labeled for manual cleanup)
+  │     │
+  │     └── (If no sandbox was ever created, cleanup is a no-op)
   │
   └── 3. Session context released
         └── SDK cleans up session state
@@ -411,68 +419,139 @@ If both timeouts fire (Docker daemon unresponsive), the container may be left ru
 
 ## 8. Lifespan Context: Complete Design
 
-The lifespan context manager was introduced in Phase 4 §2.2. This section provides the complete design incorporating death propagation, shutdown handling, and transport-aware behavior.
+The lifespan context manager was introduced in Phase 4 §2.2. This section provides the complete design incorporating lazy sandbox creation, death propagation, shutdown handling, and transport-aware behavior.
 
 ### 8.1 SessionContext
 
+`SessionContext` owns the lazy sandbox lifecycle. The sandbox is not created until the first `sandbox_exec` call triggers `get_or_create_sandbox()`.
+
 ```python
-@dataclass
 class SessionContext:
-    """Per-session state, available to tool handlers via Context."""
-    sandbox: Sandbox
-    death_task: asyncio.Task[None]
+    """Per-session state, available to tool handlers via Context.
+
+    Supports lazy sandbox creation — the sandbox is only created on
+    the first call to get_or_create_sandbox(). This allows the MCP
+    server to respond to non-exec requests (tools/list, etc.) without
+    waiting for container startup.
+    """
+
+    def __init__(
+        self,
+        backend: Backend,
+        transport: str,
+        death_callback: Callable[[], None] | None = None,
+    ) -> None:
+        self._backend = backend
+        self._transport = transport
+        self._death_callback = death_callback
+        self._sandbox: Sandbox | None = None
+        self._death_task: asyncio.Task[None] | None = None
+        self._lock = asyncio.Lock()
+
+    @property
+    def sandbox(self) -> Sandbox | None:
+        """The sandbox, or None if not yet created. Read-only."""
+        return self._sandbox
+
+    @property
+    def death_task(self) -> asyncio.Task[None] | None:
+        """The death monitor task, or None if sandbox not yet created."""
+        return self._death_task
+
+    async def get_or_create_sandbox(self) -> Sandbox:
+        """Get the sandbox, creating it lazily on first call.
+
+        Concurrency-safe: uses asyncio.Lock to ensure only one sandbox
+        is created even if multiple calls arrive simultaneously.
+
+        Returns the sandbox. Raises BackendError if creation fails.
+        On failure, subsequent calls will retry creation.
+        """
+        if self._sandbox is not None:
+            return self._sandbox
+        async with self._lock:
+            if self._sandbox is not None:
+                return self._sandbox
+            sandbox = await self._backend.create_sandbox()
+            self._start_death_monitor(sandbox)
+            self._sandbox = sandbox
+            return sandbox
+
+    def _start_death_monitor(self, sandbox: Sandbox) -> None:
+        """Start monitoring sandbox for unexpected death."""
+        async def _monitor_death() -> None:
+            try:
+                await sandbox.wait_for_death()
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                pass
+            if self._transport == "stdio":
+                if self._death_callback is not None:
+                    self._death_callback()
+                else:
+                    os.kill(os.getpid(), signal.SIGTERM)
+
+        self._death_task = asyncio.create_task(_monitor_death())
+
+    async def cleanup(self) -> None:
+        """Clean up resources. Called by lifespan on exit.
+
+        Safe to call even if no sandbox was ever created (no-op).
+        """
+        if self._death_task is not None:
+            self._death_task.cancel()
+            try:
+                await self._death_task
+            except asyncio.CancelledError:
+                pass
+        if self._sandbox is not None:
+            await self._sandbox.stop()
 ```
 
-Unchanged from Phase 4. The `death_task` is the background monitor; the `sandbox` is the exec target. Both are per-session.
+**Key design properties:**
+
+- **Lazy creation**: `sandbox` and `death_task` are `None` until `get_or_create_sandbox()` is called.
+- **Double-checked locking**: Fast path without lock (`if self._sandbox is not None`), then lock + re-check for the slow path.
+- **Retry-safe**: If `create_sandbox()` raises, `self._sandbox` stays `None`, so the next call retries.
+- **Clean cleanup**: `cleanup()` is a no-op if no sandbox was ever created.
 
 ### 8.2 Lifespan Factory
 
-The lifespan is created as a closure that captures the backend and transport mode. The transport mode determines death propagation behavior.
+The lifespan is now trivial — it creates a `SessionContext` and cleans up on exit. Sandbox creation is deferred to the first `sandbox_exec` call.
 
 ```python
 def create_lifespan(
     backend: Backend,
     transport: str,
+    *,
+    death_callback: Callable[[], None] | None = None,
 ) -> Callable[[FastMCP], AsyncContextManager[SessionContext]]:
     """Create a lifespan context manager for the given transport.
 
-    The returned context manager creates a sandbox per session and
-    handles death propagation appropriate to the transport.
+    The returned context manager sets up a SessionContext per session.
+    Sandbox creation is lazy — it happens on the first sandbox_exec
+    call, not when the lifespan enters.
     """
 
     @asynccontextmanager
     async def lifespan(server: FastMCP) -> AsyncIterator[SessionContext]:
-        sandbox = await backend.create_sandbox()
-
-        async def _monitor_death() -> None:
-            await sandbox.wait_for_death()
-            if transport == "stdio":
-                # Trigger process shutdown
-                os.kill(os.getpid(), signal.SIGTERM)
-            else:
-                # HTTP: sandbox is dead; subsequent exec calls will raise
-                # SandboxDiedError. Proactive session termination can be
-                # added here if SDK supports it.
-                pass
-
-        death_task = asyncio.create_task(_monitor_death())
-
+        ctx = SessionContext(
+            backend=backend,
+            transport=transport,
+            death_callback=death_callback,
+        )
         try:
-            yield SessionContext(sandbox=sandbox, death_task=death_task)
+            yield ctx
         finally:
-            death_task.cancel()
-            try:
-                await death_task
-            except asyncio.CancelledError:
-                pass
-            await sandbox.stop()
+            await ctx.cleanup()
 
     return lifespan
 ```
 
 ### 8.3 Integration with create_server
 
-The lifespan factory integrates with `create_server()` from Phase 4 §9:
+The lifespan factory integrates with `create_server()` from Phase 4 §9. Unchanged from Phase 4 — the only difference is that `create_lifespan` now returns a trivial context manager:
 
 ```python
 def create_server(
@@ -500,20 +579,21 @@ def create_server(
     return mcp
 ```
 
-The `create_lifespan` function replaces the inline lifespan from Phase 4. It adds transport-aware death propagation while keeping the same interface (`Callable[[FastMCP], AsyncContextManager[SessionContext]]`).
-
 ---
 
 ## 9. Edge Cases
 
-### 9.1 Sandbox Creation Failure During Session Init
+### 9.1 Sandbox Creation Failure
 
-If `backend.create_sandbox()` raises `BackendError` during session initialization:
+Since sandbox creation is lazy (happens on first `sandbox_exec`, not during session initialization), creation failures are handled differently than if they occurred at session init:
 
-- **stdio:** The lifespan raises, `mcp.run()` exits, the process terminates with an error on stderr. Most MCP clients display stderr output and offer to retry.
-- **HTTP:** The `initialize` request fails with an MCP error. The session is never created. The client can retry.
+If `backend.create_sandbox()` raises `BackendError` during `get_or_create_sandbox()`:
 
-This covers: Docker daemon down, image pull failure, readiness check failure, resource exhaustion.
+- **The `sandbox_exec` call returns `isError: true`** with the BackendError message. The session remains alive.
+- **Subsequent `sandbox_exec` calls retry creation.** The `SessionContext` allows retry — `_sandbox` stays `None` on failure, so the next call enters the creation path again.
+- **Once a sandbox is successfully created, it is used for all future calls.** No second sandbox is ever created within a session.
+
+This covers: Docker daemon down, image pull failure, readiness check failure, resource exhaustion. Transient failures (e.g., network hiccup during image pull) are automatically retried on the next `sandbox_exec` call.
 
 ### 9.2 Concurrent Death and Exec
 
@@ -564,22 +644,23 @@ This phase does not introduce new modules. It refines the existing modules defin
 
 ### 10.1 `server.py` Changes
 
-- **`create_lifespan()`** — New function. Replaces the inline lifespan from Phase 4. Transport-aware death propagation.
-- **`create_server()`** — Updated to use `create_lifespan()` instead of an inline context manager.
-- **`SessionContext`** — Unchanged.
+- **`SessionContext`** — Refactored from a simple dataclass to a class with lazy sandbox creation, concurrency-safe `get_or_create_sandbox()`, death monitor management, and `cleanup()`. See §8.1.
+- **`create_lifespan()`** — Simplified. No longer creates a sandbox or death task directly — delegates to `SessionContext`. See §8.2.
+- **`sandbox_exec_handler()`** — Uses `await session_context.get_or_create_sandbox()` instead of direct `sandbox` attribute access. Catches `BackendError` from lazy creation.
 
 ### 10.2 `cli.py` Changes
 
+- **Remove eager backend validation** — The `_validate_backend()` call in `main()` is removed. Backend validation happens lazily inside `create_sandbox()` on first `sandbox_exec`.
 - **Session timeout passthrough** — The startup flow must pass `config.session_timeout` to the FastMCP/session manager configuration. The exact mechanism depends on the SDK integration approach (§4.2).
 
-### 10.3 New Imports
+### 10.3 Imports
 
 ```python
 import os
 import signal
 ```
 
-Required for the SIGTERM-based death propagation in stdio mode (§6.3).
+Required for the SIGTERM-based death propagation in stdio mode (§6.3). These are used within `SessionContext._start_death_monitor()`.
 
 ---
 

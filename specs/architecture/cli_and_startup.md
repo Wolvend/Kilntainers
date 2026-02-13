@@ -397,25 +397,23 @@ The complete startup sequence from process launch to "ready to accept connection
 │     └── Value range checks                       │
 │     └── Failure → stderr message, exit 1        │
 ├─────────────────────────────────────────────────┤
-│  4. Create backend with config                   │
+│  4. Create backend with config (no validation)   │
 │     └── backend_cls(backend_config)             │
 ├─────────────────────────────────────────────────┤
-│  5. Validate backend prerequisites (async)       │
-│     └── docker info, etc.                       │
-│     └── Failure → stderr message, exit 1        │
-├─────────────────────────────────────────────────┤
-│  6. Assemble tool description                    │
+│  5. Assemble tool description                    │
 │     └── backend.tool_instructions() + overrides │
 │     └── Failure → stderr message, exit 1        │
 ├─────────────────────────────────────────────────┤
-│  7. Create FastMCP server                        │
+│  6. Create FastMCP server                        │
 │     └── create_server(backend, server_config)   │
 ├─────────────────────────────────────────────────┤
-│  8. Run transport (blocking)                     │
+│  7. Run transport (blocking)                     │
 │     └── mcp.run(transport="stdio" | "http")     │
 │     └── Blocks until shutdown signal            │
 └─────────────────────────────────────────────────┘
 ```
+
+**No eager backend validation.** The previous step 5 ("Validate backend prerequisites") has been removed. Backend validation (e.g., `docker info`) is deferred to the first `sandbox_exec` call, as part of lazy sandbox creation. This allows the server to start and respond to `tools/list` immediately. See `connection_lifecycle.md` §8 for the lazy creation design.
 
 ### 6.1 Implementation
 
@@ -429,14 +427,9 @@ def main() -> None:
     validate_config(server_config, backend_config)
 
     # Create backend from registry using selected --backend
+    # No validation here — validation is deferred to first sandbox_exec
     backend_cls = get_backend_class(args.backend)
     backend = backend_cls(backend_config)
-
-    # Validate backend, create server, and run
-    try:
-        _validate_backend(backend)
-    except BackendError as e:
-        _startup_error(str(e))
 
     try:
         mcp = create_server(backend, server_config)
@@ -478,11 +471,12 @@ Every step that can fail has a clear error path:
 |---|---|---|
 | Arg parsing | argparse built-in | `error: argument --port: invalid int value` |
 | Config validation | `_startup_error()` | `kilntainers: error: --host is only valid with...` |
-| Backend validation | `BackendError` caught | `kilntainers: error: Cannot connect to docker...` |
 | Tool description | `BackendError` caught | `kilntainers: error: Backend does not provide...` |
 | Transport run | Unhandled (crashes) | Stack trace — indicates a bug |
 
-Steps 1–6 are the "startup gauntlet" — all error-prone operations complete before the server starts accepting connections. Once `mcp.run()` is called, the server is in a known-good state.
+Steps 1–5 are the "startup gauntlet" — all error-prone operations complete before the server starts accepting connections. Once `mcp.run()` is called, the server is in a known-good state for accepting MCP protocol messages.
+
+**Backend validation errors are deferred.** Errors like "Docker daemon is not running" are not caught at startup. They surface on the first `sandbox_exec` call as `isError: true` MCP responses. This tradeoff is intentional — it allows the server to start immediately and respond to `tools/list`, while errors that require a running backend are reported when the backend is actually needed.
 
 ---
 
@@ -505,9 +499,10 @@ def build_configs(args) -> tuple[ServerConfig, BackendConfig]: ...
 def validate_config(server_config, backend_config) -> None: ...
 
 # Private
-def _validate_backend(backend: Backend) -> None: ...
 def _startup_error(message: str) -> NoReturn: ...
 ```
+
+**Note:** `_validate_backend()` was removed — backend validation is deferred to the first `sandbox_exec` call (lazy sandbox creation).
 
 ### 7.2 `config.py`
 

@@ -9,7 +9,7 @@ import asyncio
 
 from kilntainers.backends.base import Backend, ExecRequest, ExecResult, Sandbox
 from kilntainers.config import BackendConfig
-from kilntainers.errors import SandboxDiedError
+from kilntainers.errors import BackendError, SandboxDiedError
 
 
 class MockSandbox(Sandbox):
@@ -114,13 +114,25 @@ class MockBackend(Backend):
         self._sandbox_id = sandbox_id
         self._exec_results = exec_results
         self._validated = False
+        # Test helpers for lazy creation testing
+        self.create_count = 0
+        self.fail_next_create = False
 
     async def _validate(self) -> None:
         """Mark as validated (no-op for mock)."""
         self._validated = True
 
     async def _create_sandbox(self) -> Sandbox:
-        """Return a MockSandbox."""
+        """Return a MockSandbox.
+
+        Supports test helpers:
+        - create_count: incremented on each sandbox creation
+        - fail_next_create: if True, raises BackendError and resets flag
+        """
+        if self.fail_next_create:
+            self.fail_next_create = False
+            raise BackendError("mock creation failure")
+        self.create_count += 1
         return MockSandbox(
             sandbox_id=self._sandbox_id,
             exec_results=self._exec_results,

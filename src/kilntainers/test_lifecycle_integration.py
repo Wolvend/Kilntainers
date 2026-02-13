@@ -68,17 +68,19 @@ class TestFullLifecycle:
     @pytest.mark.integration
     @pytest.mark.asyncio
     async def test_lifecycle_full_stdio_session(self, backend, server_config, engine):
-        """Full stdio lifecycle: start sandbox, exec commands, stop sandbox."""
+        """Full stdio lifecycle: lazily create sandbox, exec commands, stop sandbox."""
         lifespan_fn = create_lifespan(backend, "stdio")
         mock_server = MagicMock()
 
         container_id = None
 
         async with lifespan_fn(mock_server) as ctx:
-            # Verify sandbox was created
-            assert ctx.sandbox is not None
-            assert ctx.sandbox.sandbox_id is not None
-            sandbox = cast(DockerSandbox, ctx.sandbox)
+            # Sandbox is None initially (lazy creation)
+            assert ctx.sandbox is None
+
+            # Create sandbox lazily
+            sandbox = cast(DockerSandbox, await ctx.get_or_create_sandbox())
+            assert sandbox.sandbox_id is not None
             container_id = sandbox._container_id
 
             # Verify container exists via docker/podman CLI
@@ -92,7 +94,7 @@ class TestFullLifecycle:
 
             # Execute a command
             request = ExecRequest(command="echo hello", timeout=5, output_limit=1024)
-            result = await ctx.sandbox.exec(request)
+            result = await sandbox.exec(request)
             assert result.exit_code == 0
             assert "hello" in result.stdout
 
@@ -102,6 +104,31 @@ class TestFullLifecycle:
             capture_output=True,
         )
         assert result.returncode != 0  # Container not found
+
+    @pytest.mark.e2e
+    @pytest.mark.integration
+    @pytest.mark.asyncio
+    async def test_lifespan_no_container_before_exec(self, backend, engine):
+        """Lifespan yields immediately, no container until get_or_create_sandbox()."""
+        lifespan_fn = create_lifespan(backend, "stdio")
+        mock_server = MagicMock()
+
+        async with lifespan_fn(mock_server) as ctx:
+            # Verify no sandbox/container yet
+            assert ctx.sandbox is None
+
+            # Create sandbox
+            sandbox = cast(DockerSandbox, await ctx.get_or_create_sandbox())
+            container_id = sandbox._container_id
+
+            # Now container should exist
+            result = subprocess.run(
+                [engine, "inspect", "--format", "{{.State.Running}}", container_id],
+                capture_output=True,
+                text=True,
+            )
+            assert result.returncode == 0
+            assert "true" in result.stdout
 
     @pytest.mark.integration
     @pytest.mark.asyncio
@@ -128,8 +155,8 @@ class TestSandboxCreationFailure:
     @pytest.mark.e2e
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_sandbox_creation_failure_raises(self, engine):
-        """BackendError during sandbox creation propagates through lifespan."""
+    async def test_sandbox_creation_failure_on_get_or_create(self, engine):
+        """BackendError during sandbox creation propagates from get_or_create_sandbox()."""
         # First verify daemon is running using the helper
         _ = await get_docker_backend(engine)
 
@@ -142,15 +169,19 @@ class TestSandboxCreationFailure:
         lifespan_fn = create_lifespan(bad_backend, "stdio")
         mock_server = MagicMock()
 
-        with pytest.raises(BackendError) as exc_info:
-            async with lifespan_fn(mock_server):
-                pass
+        async with lifespan_fn(mock_server) as ctx:
+            # Lifespan yields successfully (no sandbox yet)
+            assert ctx.sandbox is None
 
-        # Error should mention image pull or creation failure
-        assert (
-            "image" in str(exc_info.value).lower()
-            or "pull" in str(exc_info.value).lower()
-        )
+            # Error happens on get_or_create_sandbox()
+            with pytest.raises(BackendError) as exc_info:
+                await ctx.get_or_create_sandbox()
+
+            # Error should mention image pull or creation failure
+            assert (
+                "image" in str(exc_info.value).lower()
+                or "pull" in str(exc_info.value).lower()
+            )
 
 
 # ====================
@@ -173,7 +204,8 @@ class TestGracefulShutdown:
 
         with pytest.raises(ValueError):
             async with lifespan_fn(mock_server) as ctx:
-                sandbox = cast(DockerSandbox, ctx.sandbox)
+                # Create sandbox first
+                sandbox = cast(DockerSandbox, await ctx.get_or_create_sandbox())
                 container_id = sandbox._container_id
                 # Raise an exception to simulate error during session
                 raise ValueError("simulated error")
@@ -194,9 +226,11 @@ class TestGracefulShutdown:
         mock_server = MagicMock()
 
         async with lifespan_fn(mock_server) as ctx:
+            # Create sandbox first to start death task
+            sandbox = cast(DockerSandbox, await ctx.get_or_create_sandbox())
             death_task = ctx.death_task
+            assert death_task is not None
             assert not death_task.cancelled()
-            sandbox = cast(DockerSandbox, ctx.sandbox)
 
         # After exit, death task should be cancelled
         assert death_task.cancelled()
@@ -229,7 +263,8 @@ class TestDeathPropagation:
         mock_server = MagicMock()
 
         async with lifespan_fn(mock_server) as ctx:
-            sandbox = cast(DockerSandbox, ctx.sandbox)
+            # Create sandbox first to start death monitoring
+            sandbox = cast(DockerSandbox, await ctx.get_or_create_sandbox())
             container_id = sandbox._container_id
 
             # Actually kill the container externally
@@ -263,7 +298,8 @@ class TestDeathPropagation:
             """Monitor death and kill externally."""
             async with lifespan_fn(mock_server) as ctx:
                 nonlocal death_detected
-                sandbox = cast(DockerSandbox, ctx.sandbox)
+                # Create sandbox first to start death monitoring
+                sandbox = cast(DockerSandbox, await ctx.get_or_create_sandbox())
                 container_id = sandbox._container_id
 
                 # Wait for death task to start
@@ -276,8 +312,10 @@ class TestDeathPropagation:
                 )
 
                 # Wait for death detection (with timeout)
+                death_task = ctx.death_task
+                assert death_task is not None
                 try:
-                    await asyncio.wait_for(ctx.death_task, timeout=5)
+                    await asyncio.wait_for(death_task, timeout=5)
                     death_detected = True
                 except asyncio.TimeoutError:
                     pass
@@ -330,7 +368,8 @@ class TestCleanupVerification:
         container_id = None
 
         async with lifespan_fn(mock_server) as ctx:
-            sandbox = cast(DockerSandbox, ctx.sandbox)
+            # Create sandbox first
+            sandbox = cast(DockerSandbox, await ctx.get_or_create_sandbox())
             container_id = sandbox._container_id
 
             # Verify container exists

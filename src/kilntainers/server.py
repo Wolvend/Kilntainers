@@ -6,7 +6,6 @@ import os
 import signal
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
-from dataclasses import dataclass
 from typing import Annotated, Any, AsyncContextManager
 
 from mcp.server.fastmcp import Context, FastMCP
@@ -25,12 +24,103 @@ STDIN_LIMIT = 2 * 1024 * 1024  # 2 MiB (D32)
 # --- Session Context ---
 
 
-@dataclass
 class SessionContext:
-    """Per-session state, available to tool handlers via Context."""
+    """Per-session state, available to tool handlers via Context.
 
-    sandbox: Sandbox
-    death_task: asyncio.Task[None]
+    Supports lazy sandbox creation — the sandbox is only created on
+    the first call to get_or_create_sandbox(). This allows the MCP
+    server to respond to non-exec requests (tools/list, etc.) without
+    waiting for container startup.
+    """
+
+    def __init__(
+        self,
+        backend: Backend,
+        transport: str,
+        death_callback: Callable[[], None] | None = None,
+    ) -> None:
+        """Initialize the session context.
+
+        Args:
+            backend: The backend to use for sandbox creation.
+            transport: The transport mode ("stdio" or "http").
+            death_callback: Optional callback for sandbox death in stdio mode.
+        """
+        self._backend = backend
+        self._transport = transport
+        self._death_callback = death_callback
+        self._sandbox: Sandbox | None = None
+        self._death_task: asyncio.Task[None] | None = None
+        self._lock = asyncio.Lock()
+
+    @property
+    def sandbox(self) -> Sandbox | None:
+        """The sandbox, or None if not yet created. Read-only."""
+        return self._sandbox
+
+    @property
+    def death_task(self) -> asyncio.Task[None] | None:
+        """The death monitor task, or None if sandbox not yet created."""
+        return self._death_task
+
+    async def get_or_create_sandbox(self) -> Sandbox:
+        """Get the sandbox, creating it lazily on first call.
+
+        Concurrency-safe: uses asyncio.Lock to ensure only one sandbox
+        is created even if multiple calls arrive simultaneously.
+
+        Returns:
+            The sandbox instance.
+
+        Raises:
+            BackendError: If sandbox creation fails. The next call
+                will retry creation.
+        """
+        if self._sandbox is not None:
+            return self._sandbox
+        async with self._lock:
+            # Double-check after acquiring lock
+            if self._sandbox is not None:
+                return self._sandbox
+            sandbox = await self._backend.create_sandbox()
+            self._start_death_monitor(sandbox)
+            self._sandbox = sandbox
+            return sandbox
+
+    def _start_death_monitor(self, sandbox: Sandbox) -> None:
+        """Start monitoring sandbox for unexpected death."""
+
+        async def _monitor_death() -> None:
+            try:
+                await sandbox.wait_for_death()
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                # Unexpected error monitoring sandbox — treat as death
+                pass
+
+            # Sandbox died (or monitoring failed)
+            if self._transport == "stdio":
+                if self._death_callback is not None:
+                    self._death_callback()
+                else:
+                    os.kill(os.getpid(), signal.SIGTERM)
+
+        self._death_task = asyncio.create_task(_monitor_death())
+
+    async def cleanup(self) -> None:
+        """Clean up resources. Called by lifespan on exit.
+
+        Safe to call even if no sandbox was ever created (no-op).
+        """
+        if self._death_task is not None:
+            self._death_task.cancel()
+            try:
+                await self._death_task
+            except asyncio.CancelledError:
+                pass
+        if self._sandbox is not None:
+            await self._sandbox.stop()
 
 
 # --- Tool Description Assembly ---
@@ -100,8 +190,9 @@ def create_lifespan(
 ) -> Callable[[FastMCP], AsyncContextManager[SessionContext]]:
     """Create a lifespan context manager for the given transport.
 
-    The returned context manager creates a sandbox per session and
-    handles death propagation appropriate to the transport.
+    The returned context manager creates a SessionContext that supports
+    lazy sandbox creation. The sandbox is not created until the first
+    sandbox_exec call.
 
     Args:
         backend: The backend to use for creating sandboxes.
@@ -116,45 +207,16 @@ def create_lifespan(
 
     @asynccontextmanager
     async def lifespan(server: FastMCP) -> AsyncIterator[SessionContext]:
-        """Create a sandbox for this session and clean up on exit."""
-        sandbox = await backend.create_sandbox()
-
-        async def _monitor_death() -> None:
-            """Monitor sandbox death and trigger appropriate shutdown."""
-            try:
-                await sandbox.wait_for_death()
-            except asyncio.CancelledError:
-                # Normal shutdown — propagate cancellation
-                raise
-            except Exception:
-                # Unexpected error monitoring sandbox — treat as death
-                # We don't have logging (D31), so we just proceed with death handling
-                pass
-
-            # If we reach here, sandbox died (or monitoring failed)
-            if transport == "stdio":
-                if death_callback is not None:
-                    # Test mode: call custom callback instead of sending signal
-                    death_callback()
-                else:
-                    # Trigger process shutdown via SIGTERM to self
-                    # This reuses the existing graceful shutdown path
-                    os.kill(os.getpid(), signal.SIGTERM)
-            # For HTTP: sandbox is dead; subsequent exec calls will raise
-            # SandboxDiedError. Proactive session termination can be
-            # added here if SDK supports it.
-
-        death_task = asyncio.create_task(_monitor_death())
-
+        """Create a SessionContext for this session and clean up on exit."""
+        ctx = SessionContext(
+            backend=backend,
+            transport=transport,
+            death_callback=death_callback,
+        )
         try:
-            yield SessionContext(sandbox=sandbox, death_task=death_task)
+            yield ctx
         finally:
-            death_task.cancel()
-            try:
-                await death_task
-            except asyncio.CancelledError:
-                pass
-            await sandbox.stop()
+            await ctx.cleanup()
 
     return lifespan
 
@@ -242,6 +304,16 @@ def _create_handler(config: ServerConfig) -> Callable[..., Any]:
         Returns:
             A CallToolResult with the execution result or error.
         """
+        # --- Input sanitization ---
+        if args is not None and len(args) == 0:
+            args = None
+        if command is not None and len(command) == 0:
+            command = None
+        if working_directory is not None and len(working_directory) == 0:
+            working_directory = None
+        if stdin is not None and len(stdin) == 0:
+            stdin = None
+
         # --- Input validation ---
         error = _validate_inputs(command, args, stdin, working_directory, timeout)
         if error is not None:
@@ -260,7 +332,16 @@ def _create_handler(config: ServerConfig) -> Callable[..., Any]:
                 isError=True,
             )
 
-        sandbox = ctx.request_context.lifespan_context.sandbox
+        session_context = ctx.request_context.lifespan_context
+
+        # --- Lazy sandbox creation ---
+        try:
+            sandbox = await session_context.get_or_create_sandbox()
+        except BackendError as e:
+            return CallToolResult(
+                content=[TextContent(type="text", text=str(e))],
+                isError=True,
+            )
 
         # --- Construct ExecRequest ---
         request = ExecRequest(

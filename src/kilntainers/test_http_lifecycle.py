@@ -17,13 +17,19 @@ class TestHTTPLifespan:
     """Tests for HTTP-specific lifespan behavior."""
 
     @pytest.mark.asyncio
-    async def test_http_lifespan_creates_sandbox(self):
-        """HTTP lifespan creates a sandbox per session."""
+    async def test_http_lifespan_creates_sandbox_lazily(self):
+        """HTTP lifespan creates a sandbox lazily per session."""
         backend = MockBackend(BackendConfig())
         lifespan_fn = create_lifespan(backend, "http")
         mock_server = MagicMock()
 
         async with lifespan_fn(mock_server) as ctx:
+            # Sandbox is None initially (lazy creation)
+            assert ctx.sandbox is None
+            assert ctx.death_task is None
+
+            # Create sandbox lazily
+            await ctx.get_or_create_sandbox()
             assert ctx.sandbox is not None
             assert ctx.death_task is not None
             assert not ctx.death_task.cancelled()
@@ -55,6 +61,9 @@ class TestHTTPLifespan:
             mock_server = MagicMock()
 
             async with lifespan_fn(mock_server) as ctx:
+                # Create sandbox first to start death monitoring
+                await ctx.get_or_create_sandbox()
+
                 # Simulate sandbox death via the MockSandbox's method
                 mock_sandbox = ctx.sandbox
                 if hasattr(mock_sandbox, "simulate_death"):

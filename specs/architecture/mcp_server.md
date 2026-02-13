@@ -97,42 +97,37 @@ The MCP server layer lives in `src/kilntainers/server.py` and orchestrates:
 
 The lifespan context manager is the bridge between the MCP server and the backend. It runs once per session — for stdio, that's the process lifetime; for HTTP, it's per `Mcp-Session-Id`.
 
+**Sandbox creation is lazy.** The lifespan does not create a sandbox on entry. Instead, it yields a `SessionContext` that creates the sandbox on the first `sandbox_exec` call. This allows the server to respond to `tools/list`, `initialize`, and other non-exec requests immediately.
+
 ```python
-@dataclass
 class SessionContext:
-    """Per-session state, available to tool handlers via Context."""
-    sandbox: Sandbox
-    death_task: asyncio.Task[None]
+    """Per-session state, available to tool handlers via Context.
+
+    Supports lazy sandbox creation via get_or_create_sandbox().
+    See connection_lifecycle.md §8.1 for the complete design.
+    """
+    def __init__(self, backend, transport, death_callback=None): ...
+
+    async def get_or_create_sandbox(self) -> Sandbox: ...
+    async def cleanup(self) -> None: ...
 
 @asynccontextmanager
-async def app_lifespan(
-    server: FastMCP,
-) -> AsyncIterator[SessionContext]:
-    """Create a sandbox for this session and clean up on exit."""
-    sandbox = await backend.create_sandbox()
-
-    # Start death monitor (Phase 6 covers connection drop mechanics)
-    death_task = asyncio.create_task(sandbox.wait_for_death())
-
+async def lifespan(server: FastMCP) -> AsyncIterator[SessionContext]:
+    ctx = SessionContext(backend=backend, transport=transport)
     try:
-        yield SessionContext(sandbox=sandbox, death_task=death_task)
+        yield ctx
     finally:
-        death_task.cancel()
-        try:
-            await death_task
-        except asyncio.CancelledError:
-            pass
-        await sandbox.stop()
+        await ctx.cleanup()
 ```
 
 **How this maps to session lifecycles:**
 
 | Transport | Lifespan scope | Effect |
 |---|---|---|
-| stdio | One per process | One sandbox for the server's lifetime. |
-| Streamable HTTP | One per session | Each client session gets its own sandbox. Created on `initialize`, torn down on disconnect/idle timeout. |
+| stdio | One per process | One sandbox for the server's lifetime, created on first `sandbox_exec`. |
+| Streamable HTTP | One per session | Each client session gets its own sandbox. Created on first `sandbox_exec`, torn down on disconnect/idle timeout. |
 
-The `backend` object is created once during startup (before `FastMCP` is instantiated) and shared across all sessions. It's safe for concurrent `create_sandbox()` calls (Phase 2 §8).
+The `backend` object is created once during startup (before `FastMCP` is instantiated) and shared across all sessions. It's safe for concurrent `create_sandbox()` calls (Phase 2 §8). The complete `SessionContext` design (lazy creation, concurrency safety, death monitoring) is defined in `connection_lifecycle.md` §8.1.
 
 ### 2.3 FastMCP Instance
 
@@ -194,7 +189,7 @@ If precise schema control becomes important in the future, the tool can be regis
 
 ### 3.3 Handler Implementation
 
-The handler validates inputs, constructs an `ExecRequest`, delegates to the sandbox, and formats the response.
+The handler validates inputs, lazily creates or retrieves the sandbox, constructs an `ExecRequest`, delegates to the sandbox, and formats the response.
 
 ```python
 from mcp.server.fastmcp import Context
@@ -223,9 +218,18 @@ async def sandbox_exec_handler(
             isError=True,
         )
 
-    # --- Construct ExecRequest ---
-    sandbox = ctx.request_context.lifespan_context.sandbox
+    # --- Get or create sandbox (lazy creation) ---
+    session_context = ctx.request_context.lifespan_context
 
+    try:
+        sandbox = await session_context.get_or_create_sandbox()
+    except BackendError as e:
+        return CallToolResult(
+            content=[TextContent(type="text", text=str(e))],
+            isError=True,
+        )
+
+    # --- Construct ExecRequest ---
     request = ExecRequest(
         command=command,
         args=args,
@@ -257,6 +261,8 @@ async def sandbox_exec_handler(
         isError=False,
     )
 ```
+
+**Lazy creation note:** The `get_or_create_sandbox()` call is the trigger for sandbox creation on the first `sandbox_exec`. Subsequent calls return the existing sandbox immediately. The command timeout in `ExecRequest` applies only to `sandbox.exec()`, not to sandbox creation — creation has its own internal timeouts.
 
 ### 3.4 Input Validation
 
@@ -312,9 +318,10 @@ The handler maps conditions to `isError` following the functional spec §2.5:
 | Output limit exceeded | `false` | `sandbox.exec()` returns `ExecResult` with exit_code 1 |
 | Invalid parameters | `true` | `_validate_inputs()` returns error message |
 | Stdin too large | `true` | `_validate_inputs()` returns error message |
+| Sandbox creation failed | `true` | `get_or_create_sandbox()` raises `BackendError` |
 | Sandbox died | `true` | `sandbox.exec()` raises `SandboxDiedError` |
 
-**Key insight:** The backend (Phase 3) produces `ExecResult` for all normal outcomes including timeout and output limit. These are wrapped in `CallToolResult(isError=False)`. Only infrastructure failures (validation errors, sandbox death) produce `isError=True`. This keeps the handler logic simple — any ExecResult is a successful tool call.
+**Key insight:** The backend (Phase 3) produces `ExecResult` for all normal outcomes including timeout and output limit. These are wrapped in `CallToolResult(isError=False)`. Only infrastructure failures (validation errors, sandbox creation failure, sandbox death) produce `isError=True`. This keeps the handler logic simple — any ExecResult is a successful tool call.
 
 ### 3.6 Response Format
 
@@ -443,14 +450,19 @@ Phase 5 (CLI & configuration) covers argument validation, including rejecting HT
 4. Handler validates inputs
    ├── Invalid → return CallToolResult(isError=true, message)
    └── Valid → continue
-5. Handler constructs ExecRequest (resolves defaults from server config)
-6. Handler calls sandbox.exec(request) via lifespan context
+5. Handler calls get_or_create_sandbox() (lazy creation)
+   ├── First call: validate backend → create sandbox → start death monitor
+   ├── Subsequent calls: return existing sandbox immediately
+   ├── BackendError → return CallToolResult(isError=true, message)
+   └── Sandbox ready → continue
+6. Handler constructs ExecRequest (resolves defaults from server config)
+7. Handler calls sandbox.exec(request)
    ├── SandboxDiedError → return CallToolResult(isError=true, message)
    │                       (Phase 6 handles connection drop)
    └── ExecResult → continue
-7. Handler serializes ExecResult to JSON
-8. Handler returns CallToolResult(isError=false, content=[TextContent(json)])
-9. MCP SDK serializes response and sends to client
+8. Handler serializes ExecResult to JSON
+9. Handler returns CallToolResult(isError=false, content=[TextContent(json)])
+10. MCP SDK serializes response and sends to client
 ```
 
 **Tool list request (`tools/list`):**
@@ -460,6 +472,8 @@ Phase 5 (CLI & configuration) covers argument validation, including rejecting HT
 2. FastMCP returns the registered tool with name, description, and schema
 3. MCP SDK serializes and sends to client
 ```
+
+**Note:** `tools/list` does not trigger sandbox creation. It responds immediately regardless of sandbox state. This is the key benefit of lazy loading.
 
 ### 6.2 Default Resolution
 
@@ -511,22 +525,22 @@ The full startup sequence, from process launch to accepting connections. Phase 5
 
 ```
 1. Parse CLI arguments → config objects        (Phase 5)
-2. Create backend with config                  (Phase 2, 3)
-3. Validate backend prerequisites              (Phase 2, 3)
-   └── docker info, etc. Fail fast with actionable errors.
-4. Assemble tool description                   (§4)
+2. Create backend with config (no validation)  (Phase 2, 3)
+3. Assemble tool description                   (§4)
    └── backend.tool_instructions() + overrides. Fail if empty.
-5. Create FastMCP instance                     (§2.3)
+4. Create FastMCP instance                     (§2.3)
    └── With lifespan, host, port.
-6. Register sandbox_exec tool                    (§3.1)
+5. Register sandbox_exec tool                  (§3.1)
    └── mcp.add_tool() with assembled description.
-7. Run transport                               (§5)
+6. Run transport                               (§5)
    └── mcp.run(transport=...) — blocks until shutdown.
 ```
 
-Steps 2–4 happen before FastMCP is created. If any step fails, the process exits with a clear error message on stderr and a non-zero exit code.
+**No eager backend validation.** Backend prerequisites (Docker daemon reachable, etc.) are validated lazily on the first `sandbox_exec` call, as part of `backend.create_sandbox()`. This allows the server to start and respond to `tools/list` immediately. See `connection_lifecycle.md` §8 for the lazy creation design.
 
-Step 7 (`mcp.run()`) blocks — it runs the event loop and handles connections until the process is terminated. For stdio, it reads from stdin until EOF or SIGTERM. For HTTP, it listens on the configured port until SIGTERM.
+Steps 2–3 happen before FastMCP is created. If any step fails, the process exits with a clear error message on stderr and a non-zero exit code.
+
+Step 6 (`mcp.run()`) blocks — it runs the event loop and handles connections until the process is terminated. For stdio, it reads from stdin until EOF or SIGTERM. For HTTP, it listens on the configured port until SIGTERM.
 
 ---
 

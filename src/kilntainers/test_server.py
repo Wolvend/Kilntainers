@@ -38,12 +38,21 @@ def mock_backend() -> MockBackend:
 
 @pytest.fixture
 async def mock_context(mock_backend: MockBackend) -> MagicMock:
-    """Return a mock FastMCP Context for testing."""
+    """Return a mock FastMCP Context for testing.
+
+    Pre-creates the sandbox so handler tests can configure exec results
+    before calling the handler.
+    """
     ctx = MagicMock()
-    ctx.request_context.lifespan_context = SessionContext(
-        sandbox=MockSandbox(),
-        death_task=asyncio.create_task(asyncio.sleep(10)),
+    # Use a no-op death callback to prevent SIGTERM during tests
+    session_ctx = SessionContext(
+        backend=mock_backend,
+        transport="stdio",
+        death_callback=lambda: None,
     )
+    # Pre-create sandbox so handler tests can configure exec results
+    await session_ctx.get_or_create_sandbox()
+    ctx.request_context.lifespan_context = session_ctx
     return ctx
 
 
@@ -455,49 +464,59 @@ async def test_request_construction_working_directory_none_when_not_provided(
 # --- Lifespan Tests ---
 
 
-async def test_lifespan_creates_sandbox(mock_backend: MockBackend) -> None:
-    """Lifespan creates a sandbox via backend.create_sandbox()."""
-    lifespan_fn = create_lifespan(mock_backend, "stdio")
-    mock_server = MagicMock()
-
-    async with lifespan_fn(mock_server) as ctx:
-        assert ctx.sandbox is not None
-        assert ctx.sandbox.sandbox_id == "mock-sandbox-001"
-
-
-async def test_lifespan_yields_session_context(mock_backend: MockBackend) -> None:
-    """Lifespan yields a SessionContext with sandbox and death_task."""
+async def test_lifespan_yields_session_context_with_no_sandbox(
+    mock_backend: MockBackend,
+) -> None:
+    """Lifespan yields a SessionContext with sandbox=None initially (lazy creation)."""
     lifespan_fn = create_lifespan(mock_backend, "stdio")
     mock_server = MagicMock()
 
     async with lifespan_fn(mock_server) as ctx:
         assert isinstance(ctx, SessionContext)
-        assert hasattr(ctx, "sandbox")
-        assert hasattr(ctx, "death_task")
-        assert isinstance(ctx.death_task, asyncio.Task)
+        assert ctx.sandbox is None
+        assert ctx.death_task is None
 
 
-async def test_lifespan_cancels_death_task_on_exit(mock_backend: MockBackend) -> None:
-    """On exit, death_task is cancelled."""
+async def test_lifespan_creates_sandbox_lazily(mock_backend: MockBackend) -> None:
+    """Sandbox is created lazily via get_or_create_sandbox()."""
     lifespan_fn = create_lifespan(mock_backend, "stdio")
     mock_server = MagicMock()
 
     async with lifespan_fn(mock_server) as ctx:
+        # Initially no sandbox
+        assert ctx.sandbox is None
+        # Create sandbox lazily
+        sandbox = await ctx.get_or_create_sandbox()
+        assert sandbox is not None
+        assert sandbox.sandbox_id == "mock-sandbox-001"
+        # Now the property returns the sandbox
+        assert ctx.sandbox is sandbox
+
+
+async def test_lifespan_cancels_death_task_on_exit(mock_backend: MockBackend) -> None:
+    """On exit, death_task is cancelled (after sandbox is created)."""
+    lifespan_fn = create_lifespan(mock_backend, "stdio")
+    mock_server = MagicMock()
+
+    async with lifespan_fn(mock_server) as ctx:
+        # Create sandbox to start death task
+        await ctx.get_or_create_sandbox()
         death_task = ctx.death_task
+        assert death_task is not None
         assert not death_task.cancelled()
-        # Death task should still be running
 
     # After exit, death task should be cancelled
     assert death_task.cancelled()
 
 
 async def test_lifespan_calls_sandbox_stop_on_exit(mock_backend: MockBackend) -> None:
-    """On exit, sandbox.stop() is called."""
+    """On exit, sandbox.stop() is called (after sandbox is created)."""
     lifespan_fn = create_lifespan(mock_backend, "stdio")
     mock_server = MagicMock()
 
     async with lifespan_fn(mock_server) as ctx:
-        sandbox = cast(MockSandbox, ctx.sandbox)
+        # Create sandbox
+        sandbox = cast(MockSandbox, await ctx.get_or_create_sandbox())
         assert not sandbox.is_stopped()
 
     # After exit, sandbox should be stopped
@@ -515,7 +534,8 @@ async def test_lifespan_stops_sandbox_even_if_exception_raised(
 
     with pytest.raises(ValueError):
         async with lifespan_fn(mock_server) as ctx:
-            sandbox = cast(MockSandbox, ctx.sandbox)
+            # Create sandbox first
+            sandbox = cast(MockSandbox, await ctx.get_or_create_sandbox())
             raise ValueError("test error")
 
     # Sandbox should still be stopped
@@ -535,8 +555,10 @@ async def test_death_triggers_sigterm_stdio(
     mock_server = MagicMock()
 
     async with lifespan_fn(mock_server) as ctx:
+        # Create sandbox first to start death monitoring
+        sandbox = cast(MockSandbox, await ctx.get_or_create_sandbox())
         # Simulate sandbox death
-        cast(MockSandbox, ctx.sandbox).simulate_death()
+        sandbox.simulate_death()
         # Give death task time to process
         await asyncio.sleep(0.1)
 
@@ -556,8 +578,10 @@ async def test_death_does_not_trigger_sigterm_http(
     mock_server = MagicMock()
 
     async with lifespan_fn(mock_server) as ctx:
+        # Create sandbox first to start death monitoring
+        sandbox = cast(MockSandbox, await ctx.get_or_create_sandbox())
         # Simulate sandbox death
-        cast(MockSandbox, ctx.sandbox).simulate_death()
+        sandbox.simulate_death()
         # Give death task time to process
         await asyncio.sleep(0.1)
 
@@ -565,14 +589,147 @@ async def test_death_does_not_trigger_sigterm_http(
     assert len(kill_calls) == 0
 
 
-async def test_lifespan_creates_sandbox_for_http(mock_backend: MockBackend) -> None:
-    """Lifespan creates a sandbox for HTTP transport as well."""
+async def test_lifespan_creates_sandbox_lazily_for_http(
+    mock_backend: MockBackend,
+) -> None:
+    """Lifespan creates a sandbox lazily for HTTP transport as well."""
     lifespan_fn = create_lifespan(mock_backend, "http")
     mock_server = MagicMock()
 
     async with lifespan_fn(mock_server) as ctx:
-        assert ctx.sandbox is not None
-        assert ctx.sandbox.sandbox_id == "mock-sandbox-001"
+        assert ctx.sandbox is None
+        sandbox = await ctx.get_or_create_sandbox()
+        assert sandbox is not None
+        assert sandbox.sandbox_id == "mock-sandbox-001"
+
+
+# --- SessionContext Lazy Creation Tests ---
+
+
+async def test_session_context_lazy_creation(mock_backend: MockBackend) -> None:
+    """SessionContext starts with sandbox=None. After get_or_create_sandbox(), sandbox is not None."""
+    ctx = SessionContext(backend=mock_backend, transport="stdio")
+
+    assert ctx.sandbox is None
+    assert ctx.death_task is None
+
+    sandbox = await ctx.get_or_create_sandbox()
+    assert sandbox is not None
+    assert ctx.sandbox is sandbox
+
+
+async def test_session_context_returns_same_sandbox(mock_backend: MockBackend) -> None:
+    """Two calls to get_or_create_sandbox() return the same sandbox instance."""
+    ctx = SessionContext(backend=mock_backend, transport="stdio")
+
+    sandbox1 = await ctx.get_or_create_sandbox()
+    sandbox2 = await ctx.get_or_create_sandbox()
+
+    assert sandbox1 is sandbox2
+    assert mock_backend.create_count == 1
+
+
+async def test_session_context_concurrent_creation(mock_backend: MockBackend) -> None:
+    """Concurrent get_or_create_sandbox() creates exactly one sandbox."""
+    ctx = SessionContext(backend=mock_backend, transport="stdio")
+
+    # Launch multiple concurrent calls
+    results = await asyncio.gather(
+        ctx.get_or_create_sandbox(),
+        ctx.get_or_create_sandbox(),
+        ctx.get_or_create_sandbox(),
+    )
+
+    # All should return the same sandbox
+    assert results[0] is results[1] is results[2]
+    # Only one sandbox should have been created
+    assert mock_backend.create_count == 1
+
+
+async def test_session_context_cleanup_without_sandbox(
+    mock_backend: MockBackend,
+) -> None:
+    """Call cleanup() without ever creating a sandbox. Should be a no-op."""
+    ctx = SessionContext(backend=mock_backend, transport="stdio")
+
+    # No sandbox created
+    assert ctx.sandbox is None
+
+    # Cleanup should not raise
+    await ctx.cleanup()
+
+
+async def test_session_context_cleanup_with_sandbox(mock_backend: MockBackend) -> None:
+    """Create sandbox, then cleanup. Death task cancelled, sandbox stopped."""
+    ctx = SessionContext(backend=mock_backend, transport="stdio")
+
+    sandbox = cast(MockSandbox, await ctx.get_or_create_sandbox())
+    death_task = ctx.death_task
+
+    assert death_task is not None
+    assert not death_task.cancelled()
+    assert not sandbox.is_stopped()
+
+    await ctx.cleanup()
+
+    assert death_task.cancelled()
+    assert sandbox.is_stopped()
+
+
+async def test_session_context_retry_on_creation_failure(
+    mock_backend: MockBackend,
+) -> None:
+    """First get_or_create_sandbox() fails, second call succeeds."""
+    ctx = SessionContext(backend=mock_backend, transport="stdio")
+
+    # Configure first call to fail
+    mock_backend.fail_next_create = True
+
+    with pytest.raises(BackendError) as exc_info:
+        await ctx.get_or_create_sandbox()
+    assert "mock creation failure" in str(exc_info.value)
+
+    # Sandbox should still be None
+    assert ctx.sandbox is None
+
+    # Second call should succeed
+    sandbox = await ctx.get_or_create_sandbox()
+    assert sandbox is not None
+    assert ctx.sandbox is sandbox
+
+
+async def test_handler_backend_error_on_lazy_creation(
+    mock_backend: MockBackend,
+    server_config: ServerConfig,
+) -> None:
+    """Handler with a backend that fails to create sandbox returns isError=True."""
+    handler = _create_handler(server_config)
+
+    # Create SessionContext that will fail on first creation
+    session_ctx = SessionContext(backend=mock_backend, transport="stdio")
+    mock_backend.fail_next_create = True
+
+    ctx = MagicMock()
+    ctx.request_context.lifespan_context = session_ctx
+
+    result = await handler(command="test", ctx=ctx)
+
+    assert result.isError is True
+    assert "mock creation failure" in result.content[0].text
+
+
+async def test_session_context_death_monitor_starts_after_creation(
+    mock_backend: MockBackend,
+) -> None:
+    """death_task is None before get_or_create_sandbox(), not None after."""
+    ctx = SessionContext(backend=mock_backend, transport="stdio")
+
+    assert ctx.death_task is None
+
+    await ctx.get_or_create_sandbox()
+
+    assert ctx.death_task is not None
+    assert isinstance(ctx.death_task, asyncio.Task)
 
 
 # --- Server Factory Tests ---

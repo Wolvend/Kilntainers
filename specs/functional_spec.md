@@ -192,16 +192,14 @@ Resource limits (CPU, memory) default to no explicit limits — Docker defaults 
 
 ### 3.3 Startup Validation
 
-On startup, before creating any sandbox or accepting connections:
+On startup, before accepting connections:
 
 1. **Parse and validate CLI arguments.** Reject unknown args, invalid types, and conflicting params (e.g., both override and extended instruction). This includes validation at for library side (MCP config), and the selected backend should validate backend specific args.
 2. **Assemble tool description** (see Section 6). Fail if the result is empty.
-3. **Backend validation.** The backend checks its prerequisites. For Docker:
-   - Verify the container engine is reachable (`{engine} info`, where `{engine}` is the configured `--engine` value).
-   - Verify the configured shell exists in the image if feasible.
-   - Report clear, actionable errors (e.g., `"Docker daemon is not running"` not `"connection refused"`).
 
-All validation failures are reported to stderr and cause the process to exit with a non-zero code.
+Steps 1–2 are synchronous and complete before the server accepts any MCP connections. All validation failures are reported to stderr and cause the process to exit with a non-zero code.
+
+**Backend validation is deferred.** Backend prerequisite checks (e.g., `docker info`, image availability) are not performed at startup. They run automatically on the first `sandbox_exec` call, as part of lazy sandbox creation (see §4.3). This allows the server to start immediately and respond to non-exec MCP requests (`tools/list`, `initialize`, etc.) without waiting for container infrastructure. If backend validation fails on first exec, the error is returned as an MCP error (`isError: true`) with an actionable message.
 
 ---
 
@@ -212,11 +210,14 @@ All validation failures are reported to stderr and cause the process to exit wit
 One sandbox for the lifetime of the server process. (D8)
 
 ```
-Process starts → validate config → start sandbox (pull image if needed)
-  → accept MCP messages → ... → stdin closes or SIGTERM → stop sandbox → exit
+Process starts → validate config → accept MCP messages
+  → first sandbox_exec → start sandbox (validate backend, pull image if needed)
+  → execute command → ... → stdin closes or SIGTERM → stop sandbox → exit
 ```
 
-Image pull happens during sandbox creation and blocks until complete. First run with a new image will be slow; subsequent runs use Docker's image cache. (D18)
+**Lazy sandbox creation:** The server accepts MCP connections and responds to non-exec requests (`tools/list`, etc.) immediately after config validation. The sandbox is created on the first `sandbox_exec` call. Image pull happens during this first exec and blocks that call until complete. First run with a new image will be slow; subsequent runs use Docker's image cache. (D18)
+
+If no `sandbox_exec` is ever called during the session, no sandbox is created and no container resources are consumed.
 
 ### 4.2 Streamable HTTP Transport
 
@@ -226,9 +227,12 @@ Multiple concurrent sessions, each with its own independent sandbox. (D8, D28)
 Server starts → validate config → listen on host:port
 
 Per session:
-  initialize request → start sandbox → return session ID
-    → accept tool calls → ... → session ends → stop sandbox
+  initialize request → return session ID
+    → accept tool calls → first sandbox_exec → start sandbox
+    → execute command → ... → session ends → stop sandbox (if started)
 ```
+
+**Lazy sandbox creation:** The `initialize` request completes immediately without creating a sandbox. The sandbox is created on the first `sandbox_exec` call within the session. If the session ends without any `sandbox_exec` calls, no sandbox resources are consumed.
 
 Sessions are identified by the `Mcp-Session-Id` header per the MCP Streamable HTTP protocol. A session ends when:
 
@@ -240,14 +244,21 @@ Multiple sessions can be active simultaneously. Each has an independent sandbox 
 
 ### 4.3 Sandbox Startup Sequence
 
-When a new sandbox is needed (process start for stdio, new session for HTTP):
+Sandbox creation is **lazy** — it happens on the first `sandbox_exec` call, not at connection time. The full startup sequence runs when the first `sandbox_exec` is received:
 
-1. **Pull image** if not locally available — blocking. (D18) Progress should be logged to stderr so the user knows something is happening.
-2. **Create and start** the sandbox (e.g., `docker run`).
-3. **Verify readiness** — execute a trivial command (e.g., `echo kilntainers-ready`) to confirm the sandbox accepts exec calls.
-4. **Accept tool calls.**
+1. **Validate backend prerequisites** (cached after first success) — e.g., verify the Docker daemon is reachable. (This was previously done at server startup.)
+2. **Pull image** if not locally available — blocking. (D18) Progress should be logged to stderr so the user knows something is happening.
+3. **Create and start** the sandbox (e.g., `docker run`).
+4. **Verify readiness** — execute a trivial command (e.g., `echo kilntainers-ready`) to confirm the sandbox accepts exec calls.
+5. **Return the exec result** for the first command.
 
-If any step fails, the connection is refused with a clear error message. For stdio, the process exits. For HTTP, the `initialize` response is an MCP error.
+**Concurrency:** If multiple `sandbox_exec` calls arrive before the sandbox is ready, only one sandbox is created. Concurrent calls wait for the same creation to complete.
+
+**Timeout isolation:** The command timeout parameter applies only to the command execution (step 5 conceptually), not to the sandbox startup time (steps 1–4). Sandbox startup has its own internal timeouts defined by the backend.
+
+**Failure handling:** If any startup step fails, the `sandbox_exec` call returns an MCP error (`isError: true`) with an actionable message. The session remains alive — subsequent `sandbox_exec` calls will retry sandbox creation. Once a sandbox is successfully created, it is used for all future calls in that session. If the sandbox dies after successful creation, the session is dead (see §4.5).
+
+**No sandbox for non-exec requests:** `tools/list`, `initialize`, and other MCP protocol requests never trigger sandbox creation. The server responds to these immediately.
 
 ### 4.4 Graceful Shutdown
 

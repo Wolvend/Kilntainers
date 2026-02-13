@@ -1,7 +1,7 @@
 """Tests for CLI argument parsing, config construction, and validation."""
 
 from typing import cast
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -462,31 +462,12 @@ def test_startup_error_exits_with_code_1(capsys):
 
 
 @pytest.mark.asyncio
-async def test_async_main_backend_validation_fails():
-    """Test that backend validation failure causes startup error."""
-    server_config = ServerConfig()
-    docker_config = DockerBackendConfig()
-
-    mock_backend = MagicMock()
-    mock_backend.validate = AsyncMock(side_effect=BackendError("Docker not running"))
-
-    with patch("kilntainers.cli.get_backend_class") as mock_get_backend:
-        mock_get_backend.return_value = lambda _: mock_backend
-
-        with pytest.raises(SystemExit) as exc_info:
-            await _async_main(server_config, docker_config, "docker")
-
-    assert exc_info.value.code == 1
-
-
-@pytest.mark.asyncio
 async def test_async_main_server_creation_fails():
     """Test that server creation failure causes startup error."""
     server_config = ServerConfig()
     docker_config = DockerBackendConfig()
 
     mock_backend = MagicMock()
-    mock_backend.validate = AsyncMock()
 
     with (
         patch("kilntainers.cli.get_backend_class") as mock_get_backend,
@@ -508,7 +489,6 @@ async def test_async_main_successful_startup():
     docker_config = DockerBackendConfig()
 
     mock_backend = MagicMock()
-    mock_backend.validate = AsyncMock()
 
     mock_mcp = MagicMock()
     mock_mcp.run = MagicMock()
@@ -521,9 +501,6 @@ async def test_async_main_successful_startup():
         mock_create_server.return_value = mock_mcp
 
         await _async_main(server_config, docker_config, "docker")
-
-        # Verify backend was validated
-        mock_backend.validate.assert_called_once()
 
         # Verify server was created
         mock_create_server.assert_called_once_with(mock_backend, server_config)
@@ -539,7 +516,6 @@ async def test_async_main_transport_mapping():
     docker_config = DockerBackendConfig()
 
     mock_backend = MagicMock()
-    mock_backend.validate = AsyncMock()
 
     mock_mcp = MagicMock()
     mock_mcp.run = MagicMock()
@@ -575,7 +551,6 @@ def test_main_keyboard_interrupt():
         patch("kilntainers.cli.validate_config"),
         patch("kilntainers.cli.get_backend_class") as mock_get_backend,
         patch("kilntainers.cli.create_server") as mock_create_server,
-        patch("kilntainers.cli._validate_backend"),
     ):
         mock_args = MagicMock()
         mock_parser.return_value.parse_args.return_value = mock_args
