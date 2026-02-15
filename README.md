@@ -1,5 +1,7 @@
 # Kilntainers: Secure Agent Sandboxes
 
+[![Build and Test](https://github.com/Kiln-AI/kilntainers/actions/workflows/build_and_test.yml/badge.svg)](https://github.com/Kiln-AI/kilntainers/actions/workflows/build_and_test.yml) [![Format and Lint](https://github.com/Kiln-AI/kilntainers/actions/workflows/format_and_lint.yml/badge.svg)](https://github.com/Kiln-AI/kilntainers/actions/workflows/format_and_lint.yml) 
+
 Kilntainers is an [MCP server](https://modelcontextprotocol.io/) that gives LLM agents isolated Linux sandboxes for executing shell commands. It exposes a single tool — `sandbox_exec` — providing the full power of a Linux command line in an ephemeral, secure environment.
 
 Designed for both development and production, Kilntainers supports local containers (Docker, Podman), cloud VMs (Modal.com), and lightweight WASM sandboxes — scaling from a single agent on your laptop to thousands in parallel.
