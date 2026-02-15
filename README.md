@@ -16,7 +16,7 @@ Install and run:
 
 ```bash
 uv tool install kilntainers
-kilntainers  # starts a stdio MCP server with Docker + debian-slim
+kilntainers  # starts with defaults: stdio MCP server, Docker, and Debian-slim
 ```
 
 Add to your MCP client (Claude Desktop, Cursor, etc.):
@@ -36,7 +36,9 @@ Add to your MCP client (Claude Desktop, Cursor, etc.):
 ```
 ┌─────────────┐     MCP     ┌──────────────┐      ┌───────────────────┐
 │  LLM Agent  │◄───────────►│  Kilntainers │◄────►│  Sandbox          │
-│  (client)   │             │  MCP Server  │      │  (container/WASM) │
+│  (client)   │             │  MCP Server  │      │  - Docker/Podman  │
+│             │             │              │      │  - Modal Cloud VM │
+│             │             │              │      │  - WASM Sandbox   │
 └─────────────┘             └──────────────┘      └───────────────────┘
 ```
 
@@ -97,8 +99,7 @@ pip install kilntainers            # also works with pip
 
 Requires Python 3.13+. Docker backend requires Docker or Podman. Modal backend requires a [Modal.com](https://modal.com) account.
 
-<details>
-<summary><h2>CLI Reference</h2></summary>
+## CLI Reference
 
 ```
 usage: kilntainers [-h] [--backend {docker,go_busybox,modal,wasm}] [--transport {stdio,http}] [--host HOST] [--port PORT] [--timeout TIMEOUT]
@@ -168,5 +169,3 @@ wasm backend options:
   --wasm-fuel WASM_FUEL
                         WASM instruction fuel limit (default: unlimited)
 ```
-
-</details>
