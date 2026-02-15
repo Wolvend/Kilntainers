@@ -260,8 +260,7 @@ def tool_instructions(self) -> str | None:
     return (
         f"Execute a shell command in an isolated Debian Linux sandbox. "
         f"Commands run in {shell_name}. Each call is independent — "
-        f"no state (shell variables, working directory, background "
-        f"processes) persists between calls. Use the working_directory "
+        f"no state (shell variables, working directory) persists between calls. Use the working_directory "
         f"parameter or chain commands with && to control execution context."
         f"\n\n"
         f"To write files or pass data without shell escaping, use the "
