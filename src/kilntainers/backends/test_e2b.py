@@ -47,11 +47,13 @@ class MockCommands:
     def __init__(self):
         self.run_responses: list[MockCommandResult | MockCommandHandle] = []
         self.sent_stdin: list[tuple[int, str]] = []
+        self.last_cmd: str | None = None
 
     def set_response(self, response: MockCommandResult | MockCommandHandle):
         self.run_responses.append(response)
 
     async def run(self, cmd: str, background: bool = False, **kwargs):
+        self.last_cmd = cmd
         if self.run_responses:
             response = self.run_responses.pop(0)
             if background and isinstance(response, MockCommandResult):
@@ -522,7 +524,7 @@ class TestE2BSandboxExec:
 
     @pytest.mark.asyncio
     async def test_exec_stdin(self, sandbox):
-        """Stdin is piped to the command via printf."""
+        """Stdin is sent via SDK's native stdin mechanism."""
         mock_sb = sandbox._e2b_sandbox
         mock_sb.commands.set_response(
             MockCommandResult(stdout="file content\n", stderr="", exit_code=0)
@@ -534,7 +536,13 @@ class TestE2BSandboxExec:
         result = await sandbox.exec(request)
 
         assert result.stdout == "file content\n"
-        # stdin is now piped via printf in the command string, not sent separately
+        # Verify stdin was sent through SDK, not shell-escaped into command
+        assert len(mock_sb.commands.sent_stdin) == 1
+        assert mock_sb.commands.sent_stdin[0] == (12345, "file content")
+        # Verify command uses head -c for EOF signaling
+        assert mock_sb.commands.last_cmd is not None
+        stdin_bytes = len("file content".encode("utf-8"))
+        assert f"head -c {stdin_bytes}" in mock_sb.commands.last_cmd
 
     @pytest.mark.asyncio
     async def test_exec_after_stop(self, sandbox):

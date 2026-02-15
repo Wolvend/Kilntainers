@@ -4,15 +4,6 @@ These tests require a valid E2B API key (set via E2B_API_KEY env var)
 and are marked with @pytest.mark.integration. They create real E2B
 sandboxes and verify the full integration.
 
-NOTE: Due to how the E2B SDK caches its internal httpx client, these tests
-should be run individually to avoid event loop issues:
-
-    # Run a single test
-    pytest -m integration -k "e2b_e2e and test_simple_command" --asyncio-mode=auto
-
-    # Or run all E2E tests serially with a fresh process for each:
-    pytest -m integration -k e2b_e2e --forked
-
 Skip with: pytest -m "not integration"
 """
 
@@ -50,18 +41,17 @@ async def create_e2b_sandbox() -> tuple[E2BBackend, E2BSandbox]:
     except BackendError:
         pytest.skip("E2B API validation failed")
     sb = await backend.create_sandbox()
-    return backend, sb
+    return backend, sb  # type: ignore
 
 
 # --- Smoke Tests ---
 # These are minimal tests to verify the E2B backend works with real API.
-# Run them individually to avoid event loop issues.
 
 
 @pytest.mark.integration
-@pytest.mark.asyncio
+@pytest.mark.asyncio(loop_scope="class")
 class TestE2BSmoke:
-    """Smoke tests for E2B backend - run individually."""
+    """Smoke tests for E2B backend."""
 
     async def test_create_sandbox_and_exec(self):
         """Create sandbox and run a simple command."""

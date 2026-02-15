@@ -255,6 +255,30 @@ class E2BSandbox(Sandbox):
             assert request.args is not None
             return " ".join(shlex.quote(arg) for arg in request.args)
 
+    def _output_limit_result(
+        self,
+        stdout: str,
+        stderr: str,
+        request: ExecRequest,
+        start_time: float,
+    ) -> ExecResult | None:
+        """Return an ExecResult if combined output exceeds the limit, else None."""
+        combined_size = len(stdout.encode("utf-8")) + len(stderr.encode("utf-8"))
+        if combined_size > request.output_limit:
+            elapsed_ms = int((time.monotonic() - start_time) * 1000)
+            return ExecResult(
+                stdout="",
+                stderr=(
+                    f"[kilntainers: output limit exceeded "
+                    f"({request.output_limit} bytes). Command terminated. "
+                    f"No output returned. Re-run with head, tail, or grep "
+                    f"to manage output size.]"
+                ),
+                exit_code=1,
+                exec_duration_ms=elapsed_ms,
+            )
+        return None
+
     def _build_run_kwargs(self, request: ExecRequest) -> dict:
         """Build keyword args for E2B commands.run()."""
         kwargs: dict = {
@@ -268,44 +292,48 @@ class E2BSandbox(Sandbox):
         """Core exec implementation."""
         cmd = self._build_command(request)
         run_kwargs = self._build_run_kwargs(request)
+        stdin_data = request.stdin  # capture for type narrowing
 
-        # Handle stdin by piping it into the command
-        if request.stdin is not None:
-            # Use printf to pipe stdin data (more reliable than send_stdin)
-            # Escape single quotes in stdin data
-            escaped_stdin = request.stdin.replace("'", "'\\''")
-            cmd = f"printf '%s' '{escaped_stdin}' | {cmd}"
+        if stdin_data is not None:
+            # Pipe stdin through SDK's native stdin mechanism rather than
+            # shell-escaping user data into the command string.
+            # Use head -c to read exactly the right number of bytes, providing
+            # EOF to the downstream command (the SDK has no close-stdin API).
+            stdin_byte_count = len(stdin_data.encode("utf-8"))
+            cmd = f"head -c {stdin_byte_count} | {cmd}"
 
         start_time = time.monotonic()
 
         try:
-            # E2B commands.run() waits for completion
-            result = await self._e2b_sandbox.commands.run(
-                cmd,
-                **run_kwargs,
-            )
+            if stdin_data is not None:
+                # Run in background with stdin enabled
+                handle = await self._e2b_sandbox.commands.run(
+                    cmd,
+                    background=True,
+                    stdin=True,
+                    **run_kwargs,
+                )
+                # Send data through SDK — never touches shell string
+                await self._e2b_sandbox.commands.send_stdin(handle.pid, stdin_data)
+                # Wait for command to complete
+                result = await handle.wait()
+            else:
+                # No stdin: foreground run waits for completion
+                result = await self._e2b_sandbox.commands.run(
+                    cmd,
+                    **run_kwargs,
+                )
 
             stdout_str = result.stdout or ""
             stderr_str = result.stderr or ""
             exit_code = result.exit_code
 
             # Check output limit
-            combined_size = len(stdout_str.encode("utf-8")) + len(
-                stderr_str.encode("utf-8")
+            limit_result = self._output_limit_result(
+                stdout_str, stderr_str, request, start_time
             )
-            if combined_size > request.output_limit:
-                elapsed_ms = int((time.monotonic() - start_time) * 1000)
-                return ExecResult(
-                    stdout="",
-                    stderr=(
-                        f"[kilntainers: output limit exceeded "
-                        f"({request.output_limit} bytes). Command terminated. "
-                        f"No output returned. Re-run with head, tail, or grep "
-                        f"to manage output size.]"
-                    ),
-                    exit_code=1,
-                    exec_duration_ms=elapsed_ms,
-                )
+            if limit_result is not None:
+                return limit_result
 
             elapsed_ms = int((time.monotonic() - start_time) * 1000)
 
@@ -333,22 +361,11 @@ class E2BSandbox(Sandbox):
             stderr_str = e.stderr or ""
 
             # Check output limit
-            combined_size = len(stdout_str.encode("utf-8")) + len(
-                stderr_str.encode("utf-8")
+            limit_result = self._output_limit_result(
+                stdout_str, stderr_str, request, start_time
             )
-            if combined_size > request.output_limit:
-                elapsed_ms = int((time.monotonic() - start_time) * 1000)
-                return ExecResult(
-                    stdout="",
-                    stderr=(
-                        f"[kilntainers: output limit exceeded "
-                        f"({request.output_limit} bytes). Command terminated. "
-                        f"No output returned. Re-run with head, tail, or grep "
-                        f"to manage output size.]"
-                    ),
-                    exit_code=1,
-                    exec_duration_ms=elapsed_ms,
-                )
+            if limit_result is not None:
+                return limit_result
 
             elapsed_ms = int((time.monotonic() - start_time) * 1000)
             return ExecResult(
@@ -375,7 +392,7 @@ class E2BSandbox(Sandbox):
             ):
                 if not self._stop_requested:
                     raise SandboxDiedError(
-                        f"Sandbox {self.sandbox_id} died during command execution"
+                        f"Sandbox {self.sandbox_id} died during command execution: {e}"
                     )
                 raise SandboxDiedError("Sandbox has been stopped")
             # Re-raise unexpected errors
@@ -416,7 +433,7 @@ class E2BSandbox(Sandbox):
     async def wait_for_death(self) -> None:
         """Block until cancelled.
 
-        Death detection is simplified: we don't poll E2B for sandbox status.
+        E2B doesn't provide a monitoring API. We don't poll E2B for sandbox status.
         Instead, sandbox death is detected at exec time when the E2B SDK
         raises an error. This method just blocks forever until cancelled
         by the MCP layer during normal shutdown.
