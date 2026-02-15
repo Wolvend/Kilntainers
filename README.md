@@ -1,72 +1,102 @@
 # Kilntainers: Secure Agent Sandboxes
 
-Kilntainers is an MCP server that gives LLM agents isolated Linux sandboxes for executing shell commands. It exposes a single tool — `sandbox_exec` — providing the full power of a Linux command line in an ephemeral, secure environment.
+Kilntainers is an [MCP server](https://modelcontextprotocol.io/) that gives LLM agents isolated Linux sandboxes for executing shell commands. It exposes a single tool — `sandbox_exec` — providing the full power of a Linux command line in an ephemeral, secure environment.
 
-It can use a variety of sandboxing backends including local containers (Docker, Podman), Cloud VMs (Modal.com), and even a Web Assembly BusyBox.
+Designed for both development and production, Kilntainers supports local containers (Docker, Podman), cloud VMs (Modal.com), and lightweight WASM sandboxes — scaling from a single agent on your laptop to thousands in parallel.
 
-It's designed for both development and deployment, giving each agent its own ephemeral sandbox and scaling to thousands of parallel sandboxes.
+## Why Kilntainers?
 
-## Overview
-
- - Simple MCP Interface: Kilntainers exposes a single tool: `sandbox_exec`, allowing your agent to run any Linux commands
- - Secure: your agent communicates with your sandbox, doesn't run inside it. There's no need for API keys or secrets in the sandbox.
- - Ephemeral sandboxes: each agent gets its own container for the duration of its MCP session, after which the resources are shut down and cleaned up.
- - Multiple backends: Docker, Podman, Modal.com (hosted VMs with sub-second startup), WASM BusyBox (lightweight tools like ls, grep, awk, etc), and a WASM Runner.
+Coding agents like Claude Code have shown how powerful an agent with a terminal can be. Agents are already excellent at using terminals, and can save thousands of tokens by leveraging common Linux utilities like `grep`, `find`, `jq`, `awk`, etc. But giving an agent access to the host OS is a security nightmare. Kilntainers gives every agent its own isolated, ephemeral sandbox.
 
 ## Quick Start
 
+Install and run:
+
 ```bash
-uv install tool kilntainers # we suggest the UV package manager
-kilntainers # starts a stdio MCP server with Docker and debian-slim
+uv tool install kilntainers
+kilntainers  # starts a stdio MCP server with Docker + debian-slim
 ```
 
-## Security Model: Containers with Sandboxes, not Containers in Sandboxes
+Add to your MCP client (Claude Desktop, Cursor, etc.):
 
-A key note about the architecture: Kilntainers gives your agent access to a sandbox over MCP, it doesn't run your agent inside a sandbox. This is an intentional design choice. Agents often need secrets (API keys, system prompts, code), and we don't want that exposed inside the sandbox where a prompt injection attack could exfiltrate it.
-
-You may separately want to sandbox your agents, which is fine.
-
-## Backends: 
-
-Kilntainers supports a number of sandbox backends:
-
- - Docker [default]: Everyone's favourite container manager. Install Docker Desktop, and Kilntainers will automatically start a debian-slim container when connected.
- - Podman: Docker's open source cousin. Just set `--engine=podman` on Kilntainer's CLI options.
- - Modal.com: cloud hosted VMs with sub-second startup. Set `--backend=modal`. Authenticate with API keys or `modal setup` CLI.
- - WASM BusyBox: runs the [go-busybox](https://github.com/rcarmo/go-busybox) project in a WASM (WebAssembly) sandbox. Not a full unix container/VM, but provides common utilities like grep, awk, and more in a very lightweight sandbox. Specify `--backend=go_busybox` on startup.
- - WASM Runner: run a custom WASM module (details below)
- - Extensible: add custom backends
-
-
-## Usage Examples
-
-Install
-```bash
-uv tool install kilntainers # standard install
-uv tool install kilntainers[wasm] # install with WASM (+15MB)
+```json
+{
+  "mcpServers": {
+    "kilntainers": {
+      "command": "kilntainers"
+    }
+  }
+}
 ```
 
-Docker Debian-slim with stdio MCP server:
-```bash
-kilntainers
+## How It Works
+
+```
+┌─────────────┐     MCP     ┌──────────────┐      ┌───────────────────┐
+│  LLM Agent  │◄───────────►│  Kilntainers │◄────►│  Sandbox          │
+│  (client)   │             │  MCP Server  │      │  (container/WASM) │
+└─────────────┘             └──────────────┘      └───────────────────┘
 ```
 
-Podman running Alpine Linux on HTTP server
+1. An MCP client connects to Kilntainers
+2. On the first `sandbox_exec` call, Kilntainers creates an isolated sandbox
+3. Commands run inside the sandbox; stdout, stderr, and exit code are returned
+4. When the session ends, the sandbox is destroyed and resources are cleaned up. Each connection gets its own independent sandbox.
+
+**Security** The agent communicates *with* the sandbox over MCP — it doesn't run *inside* it. This is intentional: agents often need secrets (API keys, system prompts, code), and those should never be exposed inside a sandbox where a prompt injection could exfiltrate them.
+
+## Backends
+
+### Docker and Podman (default)
+
+Local containers via Docker or Podman. Any OCI image works.
+
 ```bash
-kilntainers --image=alpine --transport=http --engine=podman
+kilntainers                                     # Docker + debian-slim (defaults)
+kilntainers --image=alpine --engine=podman      # Podman + Alpine
+kilntainers --image=node:22 --network           # Node.js with networking
 ```
 
-Modal.com Hosted VMs
+### Modal.com — Cloud VMs
+
+Hosted VMs with sub-second startup via [Modal.com](https://modal.com). Scales to thousands of parallel sandboxes. Supports GPUs.
+
 ```bash
-kilntainers --backend=modal --modal-token-id=1234 --modal-token-secret=ABCD
+kilntainers --backend=modal
+kilntainers --backend=modal --gpu=A10G --region=us-east  # GPU-accelerated
 ```
 
-BusyBox with WASM Sandboxing
+Authenticate via `modal setup` CLI or `--modal-token-id` / `--modal-token-secret` flags.
+
+### WASM BusyBox
+
+Runs [go-busybox](https://github.com/rcarmo/go-busybox) in a WebAssembly sandbox. Not a full Linux environment, but provides common utilities (`grep`, `awk`, `sed`, `ls`, etc.) in a very lightweight package.
+
 ```bash
+uv tool install kilntainers[wasm]  # WASM support is an optional dependency (+15MB)
 kilntainers --backend=go_busybox
 ```
 
-## CLI Reference
+### WASM Runner
+
+Run a custom WASM module as the sandbox backend. Useful for providing agents with specific tools compiled to WebAssembly.
+
+```bash
+kilntainers --backend=wasm --wasm-path=./my_tool.wasm
+```
+
+## Installation
+
+```bash
+uv tool install kilntainers        # recommended
+uv tool install kilntainers[wasm]  # optional, include WASM backends (+15MB)
+pip install kilntainers            # also works with pip
+```
+
+Requires Python 3.13+. Docker backend requires Docker or Podman. Modal backend requires a [Modal.com](https://modal.com) account.
+
+<details>
+<summary><h2>CLI Reference</h2></summary>
 
 ```
 usage: kilntainers [-h] [--backend {docker,go_busybox,modal,wasm}] [--transport {stdio,http}] [--host HOST] [--port PORT] [--timeout TIMEOUT]
@@ -137,19 +167,4 @@ wasm backend options:
                         WASM instruction fuel limit (default: unlimited)
 ```
 
-## Motivation: Deploying Agent Systems
-
-Coding agents like Claude Code have shown us how powerful an agent with a terminal can be. Agents are already excellent at using terminals (decades of pre-training data). They can save thousands of tokens by using common Linux utilities like grep, find, jq, tail, awk, etc. They can perform tasks that LLMs don't excel at (like math) using CLI utilities and scripts.
-
-However: agents with access to the host OS is generally a security nightmare. Sandboxes exist for software development agents (Claude Code sandboxes, Codex Cloud, etc). However, there are fewer options for deploying your own agents. 
-
-Kilntainers is a system that can scale to thousands of parallel agents, each with their own isolated containers, while also providing a reliable local agent development UX (Docker, Podman).
-
-## Specs
-
-This repository has detailed specs. Key design files include:
-
- - [specs/functional_spec.md] External behavior — the MCP tool interface, server configuration, connection lifecycle, backend behavioral contract, and security model. Not an architecture or implementation document.
-- [specs/decisions.md](decisions.md) — design decisions with rationale (source of truth). However these are generally captured in functional_spec
-- [specs/project_overview.md](project_overview.md) — original motivation and vision, but not maintained. Functional spec is generally more complete and up to date.
-- [specs/spec_queue.md](spec_queue.md) — tracking of items requiring specification
+</details>
