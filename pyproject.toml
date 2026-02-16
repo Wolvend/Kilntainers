@@ -44,6 +44,7 @@ dev = [
     "dotenv>=0.9.9",
     "pytest>=9.0.2",
     "pytest-asyncio>=0.26.0",
+    "pytest-timeout>=2.4.0",
     "pytest-xdist>=3.6.0",
     "wasmtime>=41.0.0",
 ]
@@ -62,6 +63,8 @@ extend-select = ["I","F401","RUF","TID"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+timeout = 65
+timeout_method = "thread"
 markers = [
     "integration: marks integration tests that require a backend (deselect with '-m \"not integration\"')",
     "e2e: marks end-to-end tests that run full server lifecycles (deselect with '-m \"not e2e\"')",
