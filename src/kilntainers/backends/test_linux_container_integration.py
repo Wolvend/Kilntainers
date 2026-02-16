@@ -5,17 +5,21 @@ They are parameterized by backend type.
 """
 
 import pytest
+import pytest_asyncio
 
 from kilntainers.backends.base import ExecRequest
 from kilntainers.backends.e2b import E2BBackend, E2BBackendConfig
 from kilntainers.backends.modal import ModalBackend, ModalBackendConfig
 from kilntainers.backends.test_docker_integration import get_docker_backend
-from kilntainers.backends.test_e2b_e2e import skip_if_no_e2b
+from kilntainers.backends.test_e2b_e2e import (
+    skip_if_e2b_temporarily_unavailable,
+    skip_if_no_e2b,
+)
 from kilntainers.backends.test_modal_integration import _modal_auth_available
 from kilntainers.errors import BackendError
 
 
-@pytest.fixture(params=["docker", "podman", "modal", "e2b"])
+@pytest_asyncio.fixture(params=["docker", "podman", "modal", "e2b"], loop_scope="class")
 async def backend(request):
     """Fixture to provide a validated backend instance for each supported type."""
     pytest.mark.integration()
@@ -46,20 +50,25 @@ async def backend(request):
         backend = E2BBackend(config)
         try:
             await backend.validate()
-        except BackendError:
+        except BackendError as e:
+            skip_if_e2b_temporarily_unavailable(e)
             pytest.skip("E2B API validation failed")
         return backend
 
     pytest.fail(f"Unknown backend type: {backend_type}")
 
 
-@pytest.fixture
+@pytest_asyncio.fixture(loop_scope="class")
 async def sandbox(backend):
     """Create a real sandbox for testing.
 
     The sandbox is automatically stopped after the test.
     """
-    sb = await backend.create_sandbox()
+    try:
+        sb = await backend.create_sandbox()
+    except BackendError as e:
+        skip_if_e2b_temporarily_unavailable(e)
+        raise
     yield sb
     # Cleanup: stop the sandbox
     await sb.stop()
@@ -75,7 +84,11 @@ class TestSharedLifecycle:
 
     async def test_create_sandbox(self, backend):
         """Sandbox creation succeeds."""
-        sb = await backend.create_sandbox()
+        try:
+            sb = await backend.create_sandbox()
+        except BackendError as e:
+            skip_if_e2b_temporarily_unavailable(e)
+            raise
         assert sb.sandbox_id is not None
         assert len(sb.sandbox_id) > 0
         await sb.stop()

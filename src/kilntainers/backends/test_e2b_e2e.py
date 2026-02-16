@@ -31,6 +31,25 @@ def skip_if_no_e2b():
         pytest.skip("E2B_API_KEY not set")
 
 
+def _is_e2b_temp_unavailable_error(error: Exception) -> bool:
+    """Return True when E2B is temporarily unavailable for integration tests."""
+    message = str(error).lower()
+    return any(
+        marker in message
+        for marker in (
+            "rate limit exceeded",
+            "maximum number of concurrent e2b sandboxes",
+            "event loop is closed",
+        )
+    )
+
+
+def skip_if_e2b_temporarily_unavailable(error: Exception) -> None:
+    """Skip when E2B cannot currently provision/serve sandboxes."""
+    if _is_e2b_temp_unavailable_error(error):
+        pytest.skip(f"E2B temporarily unavailable: {error}")
+
+
 async def create_e2b_sandbox() -> tuple[E2BBackend, E2BSandbox]:
     """Create a fresh E2B backend and sandbox for testing."""
     skip_if_no_e2b()
@@ -38,9 +57,14 @@ async def create_e2b_sandbox() -> tuple[E2BBackend, E2BSandbox]:
     backend = E2BBackend(config)
     try:
         await backend.validate()
-    except BackendError:
+    except BackendError as e:
+        skip_if_e2b_temporarily_unavailable(e)
         pytest.skip("E2B API validation failed")
-    sb = await backend.create_sandbox()
+    try:
+        sb = await backend.create_sandbox()
+    except BackendError as e:
+        skip_if_e2b_temporarily_unavailable(e)
+        raise
     return backend, sb  # type: ignore
 
 
