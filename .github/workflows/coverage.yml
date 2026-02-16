@@ -9,6 +9,7 @@ jobs:
   coverage:
     name: Generate Coverage Report
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: read # To checkout the code
       pull-requests: write # To comment on PRs

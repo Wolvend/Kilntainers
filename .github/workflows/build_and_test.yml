@@ -7,6 +7,7 @@ jobs:
   build:
     name: Build, Typecheck, and Test Python
     runs-on: ubuntu-latest
+    timeout-minutes: 10
 
     steps:
       - uses: actions/checkout@v4

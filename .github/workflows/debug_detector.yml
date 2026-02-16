@@ -9,6 +9,7 @@ on:
 jobs:
   developer-check:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - name: Search for leftover debug content
