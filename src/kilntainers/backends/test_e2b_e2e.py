@@ -53,58 +53,6 @@ async def create_e2b_sandbox() -> tuple[E2BBackend, E2BSandbox]:
 class TestE2BSmoke:
     """Smoke tests for E2B backend."""
 
-    async def test_create_sandbox_and_exec(self):
-        """Create sandbox and run a simple command."""
-        _, sb = await create_e2b_sandbox()
-        try:
-            assert isinstance(sb, E2BSandbox)
-            assert len(sb.sandbox_id) > 0
-
-            # Test basic exec
-            request = ExecRequest(command="echo hello", timeout=30, output_limit=1024)
-            result = await sb.exec(request)
-            assert result.exit_code == 0
-            assert "hello" in result.stdout
-        finally:
-            await sb.stop()
-
-    async def test_command_failure(self):
-        """Failed command returns non-zero exit code."""
-        _, sb = await create_e2b_sandbox()
-        try:
-            request = ExecRequest(command="exit 42", timeout=30, output_limit=1024)
-            result = await sb.exec(request)
-            assert result.exit_code == 42
-        finally:
-            await sb.stop()
-
-    async def test_timeout(self):
-        """Long-running command is terminated after timeout."""
-        _, sb = await create_e2b_sandbox()
-        try:
-            request = ExecRequest(command="sleep 60", timeout=2, output_limit=1024)
-            result = await sb.exec(request)
-            assert result.exit_code == 124
-            assert "timed out" in result.stderr
-        finally:
-            await sb.stop()
-
-    async def test_stdin(self):
-        """Stdin is piped to command."""
-        _, sb = await create_e2b_sandbox()
-        try:
-            request = ExecRequest(
-                command="cat",
-                stdin="hello from stdin",
-                timeout=30,
-                output_limit=1024,
-            )
-            result = await sb.exec(request)
-            assert result.exit_code == 0
-            assert "hello from stdin" in result.stdout
-        finally:
-            await sb.stop()
-
     async def test_stop_and_exec_raises(self):
         """Exec after stop raises SandboxDiedError."""
         _, sb = await create_e2b_sandbox()

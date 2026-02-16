@@ -7,13 +7,15 @@ They are parameterized by backend type.
 import pytest
 
 from kilntainers.backends.base import ExecRequest
+from kilntainers.backends.e2b import E2BBackend, E2BBackendConfig
 from kilntainers.backends.modal import ModalBackend, ModalBackendConfig
 from kilntainers.backends.test_docker_integration import get_docker_backend
+from kilntainers.backends.test_e2b_e2e import skip_if_no_e2b
 from kilntainers.backends.test_modal_integration import _modal_auth_available
 from kilntainers.errors import BackendError
 
 
-@pytest.fixture(params=["docker", "podman", "modal"])
+@pytest.fixture(params=["docker", "podman", "modal", "e2b"])
 async def backend(request):
     """Fixture to provide a validated backend instance for each supported type."""
     pytest.mark.integration()
@@ -37,6 +39,16 @@ async def backend(request):
                 pytest.skip("Cannot connect to Modal API")
             raise
         return backend
+    elif backend_type == "e2b":
+        skip_if_no_e2b()
+
+        config = E2BBackendConfig()
+        backend = E2BBackend(config)
+        try:
+            await backend.validate()
+        except BackendError:
+            pytest.skip("E2B API validation failed")
+        return backend
 
     pytest.fail(f"Unknown backend type: {backend_type}")
 
@@ -57,10 +69,10 @@ async def sandbox(backend):
 
 
 @pytest.mark.integration
+@pytest.mark.asyncio(loop_scope="class")
 class TestSharedLifecycle:
     """Tests for sandbox lifecycle operations shared across all backends."""
 
-    @pytest.mark.asyncio
     async def test_create_sandbox(self, backend):
         """Sandbox creation succeeds."""
         sb = await backend.create_sandbox()
@@ -68,19 +80,16 @@ class TestSharedLifecycle:
         assert len(sb.sandbox_id) > 0
         await sb.stop()
 
-    @pytest.mark.asyncio
     async def test_readiness_check(self, sandbox):
         """Sandbox passes readiness check (implicit in creation)."""
         # If this test runs, readiness check passed
         assert sandbox.sandbox_id is not None
 
-    @pytest.mark.asyncio
     async def test_stop(self, sandbox):
         """Stop terminates the sandbox."""
         await sandbox.stop()
         assert sandbox._stopped
 
-    @pytest.mark.asyncio
     async def test_stop_idempotent(self, sandbox):
         """Stop can be called multiple times safely."""
         await sandbox.stop()
@@ -93,10 +102,10 @@ class TestSharedLifecycle:
 
 
 @pytest.mark.integration
+@pytest.mark.asyncio(loop_scope="class")
 class TestSharedBasicExec:
     """Tests for basic command execution shared across all backends."""
 
-    @pytest.mark.asyncio
     async def test_echo_success(self, sandbox):
         """Simple echo command works."""
         request = ExecRequest(command="echo hello world", timeout=5, output_limit=1024)
@@ -105,14 +114,12 @@ class TestSharedBasicExec:
         assert "hello world" in result.stdout
         assert result.stderr == ""
 
-    @pytest.mark.asyncio
     async def test_false_fails(self, sandbox):
         """Command that fails returns non-zero exit."""
         request = ExecRequest(command="false", timeout=5, output_limit=1024)
         result = await sandbox.exec(request)
         assert result.exit_code != 0
 
-    @pytest.mark.asyncio
     async def test_nonexistent_file(self, sandbox):
         """Nonexistent file produces error output."""
         request = ExecRequest(command="ls /nonexistent", timeout=5, output_limit=1024)
@@ -125,10 +132,10 @@ class TestSharedBasicExec:
 
 
 @pytest.mark.integration
+@pytest.mark.asyncio(loop_scope="class")
 class TestSharedCommandVsArgsMode:
     """Tests for command mode vs args mode shared across all backends."""
 
-    @pytest.mark.asyncio
     async def test_command_mode_shell_features(self, sandbox):
         """Command mode supports shell features like pipes and redirects."""
         request = ExecRequest(
@@ -138,7 +145,6 @@ class TestSharedCommandVsArgsMode:
         assert result.exit_code == 0
         assert "HELLO" in result.stdout
 
-    @pytest.mark.asyncio
     async def test_args_mode_no_shell(self, sandbox):
         """Args mode does not use shell interpretation."""
         # Args mode runs echo directly, treating "|", "tr", etc. as arguments
@@ -154,10 +160,10 @@ class TestSharedCommandVsArgsMode:
 
 
 @pytest.mark.integration
+@pytest.mark.asyncio(loop_scope="class")
 class TestSharedWorkingDirectory:
     """Tests for working_directory parameter shared across all backends."""
 
-    @pytest.mark.asyncio
     async def test_working_directory(self, sandbox):
         """Working directory changes execution context."""
         request = ExecRequest(
@@ -167,11 +173,10 @@ class TestSharedWorkingDirectory:
         assert result.exit_code == 0
         assert "/tmp" in result.stdout
 
-    @pytest.mark.asyncio
     async def test_working_directory_with_command(self, sandbox):
         """Working directory works with complex commands."""
         request = ExecRequest(
-            command="pwd && ls", working_directory="/etc", timeout=5, output_limit=1024
+            command="pwd && ls", working_directory="/etc", timeout=5, output_limit=25000
         )
         result = await sandbox.exec(request)
         assert result.exit_code == 0
@@ -182,10 +187,10 @@ class TestSharedWorkingDirectory:
 
 
 @pytest.mark.integration
+@pytest.mark.asyncio(loop_scope="class")
 class TestSharedStdin:
     """Tests for stdin parameter shared across all backends."""
 
-    @pytest.mark.asyncio
     async def test_stdin_piping(self, sandbox):
         """Stdin data is piped to command."""
         request = ExecRequest(
@@ -195,7 +200,6 @@ class TestSharedStdin:
         assert result.exit_code == 0
         assert "hello from stdin" in result.stdout
 
-    @pytest.mark.asyncio
     async def test_stdin_special_characters(self, sandbox):
         """Stdin handles special characters correctly."""
         special_input = "Hello\nWorld\t!"
@@ -213,10 +217,10 @@ class TestSharedStdin:
 
 
 @pytest.mark.integration
+@pytest.mark.asyncio(loop_scope="class")
 class TestSharedFilesystemE2E:
     """End-to-end tests: filesystem state persists across execs in same sandbox."""
 
-    @pytest.mark.asyncio
     async def test_stdin_to_file_then_cat(self, sandbox):
         """Write stdin to a file in one exec; read it back in the next."""
         content = "e2e filesystem content\nline two"
@@ -236,7 +240,6 @@ class TestSharedFilesystemE2E:
         assert read_result.exit_code == 0
         assert read_result.stdout == content
 
-    @pytest.mark.asyncio
     async def test_mkdir_then_ls(self, sandbox):
         """Create a directory in one exec; list it in the next."""
         dir_path = "/tmp/e2e_testdir"
@@ -258,14 +261,18 @@ class TestSharedFilesystemE2E:
 
 
 @pytest.mark.integration
+@pytest.mark.asyncio(loop_scope="class")
 class TestSharedOutputLimit:
     """Tests for output_limit enforcement shared across all backends."""
 
-    @pytest.mark.asyncio
     async def test_output_limit_exceeded(self, sandbox):
         """Command generating excessive output is terminated."""
-        # 'yes' prints 'y' infinitely
-        request = ExecRequest(command="yes", timeout=5, output_limit=1024)
+        # Emit a ~2k byte string, which should exceed the 1k output limit.
+        request = ExecRequest(
+            command="head -c 2048 /dev/zero | tr '\\0' 'a'",
+            timeout=5,
+            output_limit=1024,
+        )
         result = await sandbox.exec(request)
         assert result.exit_code != 0
         assert "output limit exceeded" in result.stderr
@@ -275,10 +282,10 @@ class TestSharedOutputLimit:
 
 
 @pytest.mark.integration
+@pytest.mark.asyncio(loop_scope="class")
 class TestSharedStatelessExecution:
     """Tests for state isolation between exec calls shared across all backends."""
 
-    @pytest.mark.asyncio
     async def test_exports_dont_persist(self, sandbox):
         """Shell variable exports don't persist across calls."""
         # Set a variable
@@ -295,7 +302,6 @@ class TestSharedStatelessExecution:
         result2 = await sandbox.exec(request2)
         assert "test" not in result2.stdout
 
-    @pytest.mark.asyncio
     async def test_cd_doesnt_persist(self, sandbox):
         """Directory changes don't persist across calls."""
         # Change directory
