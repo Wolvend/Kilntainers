@@ -7,7 +7,6 @@ on:
 
 jobs:
   count_tests:
-    if: ${{ vars.KILN_CALCULATE_TEST_COUNT == 'true' }}
     name: Count Tests
     runs-on: ubuntu-latest
 
@@ -25,52 +24,18 @@ jobs:
       - name: Install the project
         run: uv sync --all-extras --dev
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-
-      - name: Install NPM dependencies
-        run: npm install
-        working-directory: ./app/web_ui
-
       - name: Count Python tests
         run: |
           PYTHON_TEST_COUNT=$(uv run python3 -m pytest --collect-only -q . | grep "tests collected" | awk '{print $1}' | sed 's/[^0-9]//g')
           echo "PYTHON_TEST_COUNT=$PYTHON_TEST_COUNT" >> $GITHUB_ENV
 
-      - name: Count NPM tests
-        run: |
-          JS_TEST_COUNT=$(npx vitest run --no-color | grep 'Tests  *[0-9]* passed ([0-9]*)' | awk '{print $2}' | sed 's/[^0-9]*//g')
-          echo "JS_TEST_COUNT=$JS_TEST_COUNT" >> $GITHUB_ENV
-        working-directory: ./app/web_ui
-
-      - name: Calculate total test count
-        run: |
-          TOTAL_TEST_COUNT=$((PYTHON_TEST_COUNT + JS_TEST_COUNT))
-          echo "TOTAL_TEST_COUNT=$TOTAL_TEST_COUNT" >> $GITHUB_ENV
-
       - name: Create test count badge
         uses: schneegans/dynamic-badges-action@v1.7.0
         with:
           auth: ${{ secrets.GIST_SECRET }}
-          gistID: 57742c1b1b60d597a6aba5d5148d728e
+          gistID: 9f8457cc9d44ab16ff8b9f1a977d25bb 
           filename: test_count_kiln.json
           label: Test Count
-          message: ${{ env.TOTAL_TEST_COUNT }}
+          message: ${{ env.PYTHON_TEST_COUNT }}
           color: brightgreen
 
-      - name: Run library coverage
-        # n0 disables parallel execution
-        run: |
-          uv run coverage run -m pytest -q ./libs/ -n0
-          TOTAL_LIB_COVERAGE=$(uv run coverage report | grep TOTAL | awk {'print $4'})
-          echo "TOTAL_LIB_COVERAGE=$TOTAL_LIB_COVERAGE" >> $GITHUB_ENV
-
-      - name: Create coverage badge
-        uses: schneegans/dynamic-badges-action@v1.7.0
-        with:
-          auth: ${{ secrets.GIST_SECRET }}
-          gistID: 57742c1b1b60d597a6aba5d5148d728e
-          filename: library_coverage_kiln.json
-          label: Coverage
-          message: ${{ env.TOTAL_LIB_COVERAGE }}
-          color: brightgreen
