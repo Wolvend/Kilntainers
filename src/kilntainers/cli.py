@@ -31,6 +31,7 @@ def build_parser() -> argparse.ArgumentParser:
             "MCP server providing isolated Linux sandboxes "
             "for LLM agent shell execution."
         ),
+        usage="%(prog)s [-h] [--backend {docker,go_busybox,modal,wasm}] [--transport {stdio,http}] [...]",
     )
 
     # Get available backend names for choices
