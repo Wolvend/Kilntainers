@@ -7,6 +7,7 @@ jobs:
   build:
     name: Build, Typecheck, and Test Python
     runs-on: ubuntu-latest
+    timeout-minutes: 10
 
     steps:
       - uses: actions/checkout@v4
@@ -23,7 +24,7 @@ jobs:
         run: uv sync --all-extras --dev
 
       - name: Test All Python
-        run: uv run python3 -m pytest .
+        run: uv run python3 -m pytest -vv -n auto .
 
       - name: Check Python Types
         run: uvx ty check

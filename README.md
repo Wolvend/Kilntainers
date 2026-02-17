@@ -61,9 +61,11 @@ kilntainers --image=alpine --engine=podman      # Podman + Alpine
 kilntainers --image=node:22 --network           # Node.js with networking
 ```
 
-### Modal.com — Cloud VMs
+### Cloud Containers & VMs
 
-Hosted VMs with sub-second startup via [Modal.com](https://modal.com). Scales to thousands of parallel sandboxes. Supports GPUs.
+#### Modal.com
+
+Hosted containers with sub-second startup via [Modal.com](https://modal.com). Scales to thousands of parallel sandboxes. Supports GPUs.
 
 ```bash
 kilntainers --backend=modal
@@ -72,9 +74,18 @@ kilntainers --backend=modal --gpu=A10G --region=us-east  # GPU-accelerated
 
 Authenticate via `modal setup` CLI or `--modal-token-id` / `--modal-token-secret` flags.
 
-### WASM BusyBox
+#### E2B
 
-Runs [go-busybox](https://github.com/rcarmo/go-busybox) in a WebAssembly sandbox. Not a full Linux environment, but provides common utilities (`grep`, `awk`, `sed`, `ls`, etc.) in a very lightweight package.
+Cloud hosted micro-VM sandboxes from [E2B](https://e2b.dev).
+
+```bash
+kilntainers --backend=e2b # Default Debian image
+kilntainers --backend=e2b --e2b-api-key=ABCD --e2b-template=my-custom-alpine # Custom image 
+```
+
+### WASM Go BusyBox (Experimental)
+
+Runs [go-busybox](https://github.com/rcarmo/go-busybox) in a WebAssembly sandbox. Not a full Linux environment, but provides common utilities (`grep`, `awk`, `sed`, `ls`, `wc`, `sort`, etc.) in a very lightweight and secure sandbox.
 
 ```bash
 uv tool install kilntainers[wasm]  # WASM support is an optional dependency (+15MB)

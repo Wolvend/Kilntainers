@@ -156,3 +156,20 @@ Add Streamable HTTP support with per-session sandbox management. Deferred until 
 ## Phase 9: WASM backend
 
  - [x] Implement the plan described in `specs/architecture/wasm_backend.md`
+
+---
+
+## Phase 10: E2B Backend ✅
+
+Implement `spec/architecture/e2b_backend.md`
+
+- [x] Create `src/kilntainers/backends/e2b.py` — `E2BBackendConfig`, `E2BBackend`, `E2BSandbox`
+- [x] Add `e2b` package dependency (main dependency, not optional)
+- [x] Update `pyproject.toml` — register entry point for e2b backend
+- [x] Unit tests (`src/kilntainers/backends/test_e2b.py`): mock E2B SDK, test all backend and sandbox methods
+
+**Architecture reference:** [e2b_backend.md](architecture/e2b_backend.md)
+
+**Key design decisions:**
+- E2B SDK is a main dependency (not optional like WASM)
+- No polling for death detection — sandbox death detected on next exec call

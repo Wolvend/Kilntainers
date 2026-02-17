@@ -141,6 +141,14 @@ def test_assemble_tool_description_both_override_and_extended() -> None:
             "exceeds the 2 MiB limit",
         ),
     ],
+    ids=[
+        "both-command-and-args",
+        "missing-command-and-args",
+        "relative-working-directory",
+        "timeout-zero",
+        "timeout-negative",
+        "stdin-over-2mib",
+    ],
 )
 def test_validate_inputs_invalid(
     command: str | None,

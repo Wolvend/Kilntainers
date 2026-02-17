@@ -213,7 +213,7 @@ class TestNetworkIsolation:
         try:
             # Use Python to test network (no curl required)
             request = ExecRequest(
-                command="python3 -c 'import urllib.request; print(urllib.request.urlopen(\"http://example.com\", timeout=5).read().decode()[:100])'",
+                command="python3 -c 'import sys, urllib.request; sys.stdout.write(urllib.request.urlopen(\"http://example.com\", timeout=5).read().decode()[:100])'",
                 timeout=10,
                 output_limit=1024,
             )

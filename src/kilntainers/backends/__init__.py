@@ -64,10 +64,10 @@ def _get_extra_for_backend(name: str) -> str:
     """Return the pip extra name for a backend.
 
     Maps backend names to their optional dependency group names.
+    Only WASM backends have optional dependencies.
     """
     extra_mapping = {
         "wasm": "wasm",
         "go_busybox": "wasm",
-        "modal": "modal",
     }
     return extra_mapping.get(name, "")
