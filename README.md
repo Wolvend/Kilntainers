@@ -105,6 +105,8 @@ kilntainers --backend=e2b # Default Debian image
 kilntainers --backend=e2b --e2b-api-key=ABCD --e2b-template=my-custom-alpine # Custom image 
 ```
 
+Authenticate with `--e2b-api-key` CLI arg, or `E2B_API_KEY` environment variable.
+
 ### WASM Go BusyBox (Experimental)
 
 Runs [go-busybox](https://github.com/rcarmo/go-busybox) in a WebAssembly sandbox. Not a full Linux environment, but provides common utilities (`grep`, `awk`, `sed`, `ls`, `wc`, `sort`, etc.) in a very lightweight and secure sandbox.
