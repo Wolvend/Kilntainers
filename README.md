@@ -1,15 +1,20 @@
-# Kilntainers: Secure Agent Sandboxes
+# Kilntainers 
+### Give every agent its own isolated Linux sandbox, via MCP
 
 [![Build and Test](https://github.com/Kiln-AI/kilntainers/actions/workflows/build_and_test.yml/badge.svg)](https://github.com/Kiln-AI/kilntainers/actions/workflows/build_and_test.yml) [![Format and Lint](https://github.com/Kiln-AI/kilntainers/actions/workflows/format_and_lint.yml/badge.svg)](https://github.com/Kiln-AI/kilntainers/actions/workflows/format_and_lint.yml) 
 <img src="https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/scosman/9f8457cc9d44ab16ff8b9f1a977d25bb/raw/test_count_kiln.json" alt="Test Count Badge">
 
-Kilntainers is an [MCP server](https://modelcontextprotocol.io/) that gives LLM agents isolated Linux sandboxes for executing shell commands. It exposes a single tool — `sandbox_exec` — providing the full power of a Linux command line in an ephemeral, secure environment.
+Kilntainers is an [MCP server](https://modelcontextprotocol.io/) that gives LLM agents isolated Linux sandboxes for executing shell commands. 
 
-Designed for both development and production, Kilntainers supports local containers (Docker, Podman), cloud VMs (Modal.com), and lightweight WASM sandboxes — scaling from a single agent on your laptop to thousands in parallel.
+- 🧰 **Multiple backends:** Local containers (Docker, Podman), cloud-hosted VMs ([Modal](https://modal.com), [E2B](https://e2b.dev)), and WebAssembly sandboxes (WASM BusyBox, or any WASM module).
+- 🧹 **Ephemeral sandboxes:** Each agent gets its own sandbox for the duration of its MCP session. After the session ends, resources are shut down and cleaned up.
+- 🔒 **Secure by design:** The agent communicates *with* the sandbox over MCP — it doesn’t run *inside* it. No agent API keys, code, or prompts are exposed to the sandbox.
+- 🔌 **Simple MCP interface:** A single MCP tool, `sandbox_exec`, lets your agent run any Linux command.
+- 📈 **Scalable:** Scale from a single agent on your laptop to thousands running in parallel in the cloud.
 
 ## Why Kilntainers?
 
-Coding agents like Claude Code have shown how powerful an agent with a terminal can be. Agents are already excellent at using terminals, and can save thousands of tokens by leveraging common Linux utilities like `grep`, `find`, `jq`, `awk`, etc. But giving an agent access to the host OS is a security nightmare. Kilntainers gives every agent its own isolated, ephemeral sandbox.
+Agents are already excellent at using terminals, and can save thousands of tokens by leveraging common Linux utilities like `grep`, `find`, `jq`, `awk`, etc. However giving an agent access to the host OS is a security nightmare, and running thousands of parallel agents on a service is painful. Kilntainers gives every agent its own isolated, ephemeral sandbox.
 
 ## Quick Start
 
@@ -35,22 +40,24 @@ Add to your MCP client (Claude Desktop, Cursor, etc.):
 ## How It Works
 
 ```
-┌─────────────┐     MCP     ┌──────────────┐      ┌───────────────────┐
-│  LLM Agent  │◄───────────►│  Kilntainers │◄────►│  Sandbox          │
-│  (client)   │             │  MCP Server  │      │  - Docker/Podman  │
-│             │             │              │      │  - Modal Cloud VM │
-│             │             │              │      │  - WASM Sandbox   │
-└─────────────┘             └──────────────┘      └───────────────────┘
+┌─────────────┐     MCP     ┌──────────────┐      ┌─────────────────────────┐
+│  LLM Agent  │◄───────────►│  Kilntainers │◄────►│  Sandboxes              │
+│  (client)   │             │  MCP Server  │      │  - Docker/Podman        │
+│             │             │              │      │  - Cloud VM (Modal,E2B) │
+│             │             │              │      │  - WASM Sandbox         │
+└─────────────┘             └──────────────┘      └─────────────────────────┘
 ```
 
 1. An MCP client connects to Kilntainers
-2. On the first `sandbox_exec` call, Kilntainers creates an isolated sandbox
+2. On the first `sandbox_exec` call, Kilntainers creates an isolated sandbox. Each connection gets its own independent sandbox.
 3. Commands run inside the sandbox; stdout, stderr, and exit code are returned
-4. When the session ends, the sandbox is destroyed and resources are cleaned up. Each connection gets its own independent sandbox.
+4. When the session ends, the sandbox is destroyed and resources are cleaned up. 
 
 **Security** The agent communicates *with* the sandbox over MCP — it doesn't run *inside* it. This is intentional: agents often need secrets (API keys, system prompts, code), and those should never be exposed inside a sandbox where a prompt injection could exfiltrate them.
 
-## Backends
+**Agent Isolation**: Each MCP connection will start it's own isolated sandbox. Running the server in http mode can mean many sandboxes per server; or a single sandbox if running in stdio mode.
+
+## Backend Examples
 
 ### Docker and Podman (default)
 
@@ -95,7 +102,7 @@ kilntainers --backend=go_busybox
 
 ### WASM Runner
 
-Run a custom WASM module as the sandbox backend. Useful for providing agents with specific tools compiled to WebAssembly.
+Run a custom WASM module as the sandbox backend. Provides agents a set tools compiled to WebAssembly, and an isolated filesystem.
 
 ```bash
 kilntainers --backend=wasm --wasm-path=./my_tool.wasm
@@ -109,7 +116,7 @@ uv tool install kilntainers[wasm]  # optional, include WASM backends (+15MB)
 pip install kilntainers            # also works with pip
 ```
 
-Requires Python 3.13+. Docker backend requires Docker or Podman. Modal backend requires a [Modal.com](https://modal.com) account.
+Requires Python 3.13+. Docker backend requires Docker or Podman. The Modal and E2B backends require accounts to those services.
 
 ## CLI Reference
 
