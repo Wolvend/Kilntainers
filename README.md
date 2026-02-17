@@ -145,8 +145,8 @@ options:
   -h, --help            show this help message and exit
 
 core options:
-  --backend {docker,go_busybox,modal,wasm}
-                        Backend to use (default: docker). Available: docker, go_busybox, modal, wasm
+  --backend {docker,e2b,go_busybox,modal,wasm}
+                        Backend to use (default: docker). Available: docker, e2b, go_busybox, modal, wasm
   --transport {stdio,http}
                         MCP transport (default: stdio)
   --host HOST           HTTP bind address (default: 127.0.0.1, HTTP mode only)
@@ -174,6 +174,17 @@ docker backend options:
   --memory MEMORY       Docker memory limit (e.g., "512m")
   --docker-run-flag DOCKER_RUN_FLAGS
                         Additional flag passed to docker run. Repeatable. (e.g., --docker-run-flag "--pids-limit=256")
+
+e2b backend options:
+  --e2b-api-key E2B_API_KEY
+                        E2B API key (overrides E2B_API_KEY environment variable)
+  --e2b-template E2B_TEMPLATE
+                        E2B template name or ID (default: base)
+  --e2b-sandbox-timeout E2B_SANDBOX_TIMEOUT
+                        Sandbox lifetime timeout in seconds (default: 3600)
+  --e2b-metadata E2B_METADATA
+                        Metadata key=value pairs (can be used multiple times)
+  --e2b-env E2B_ENV     Environment variable key=value pairs (can be used multiple times)
 
 modal backend options:
   --modal-token-id MODAL_TOKEN_ID
