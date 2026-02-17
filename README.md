@@ -1,6 +1,7 @@
 # Kilntainers: Secure Agent Sandboxes
 
 [![Build and Test](https://github.com/Kiln-AI/kilntainers/actions/workflows/build_and_test.yml/badge.svg)](https://github.com/Kiln-AI/kilntainers/actions/workflows/build_and_test.yml) [![Format and Lint](https://github.com/Kiln-AI/kilntainers/actions/workflows/format_and_lint.yml/badge.svg)](https://github.com/Kiln-AI/kilntainers/actions/workflows/format_and_lint.yml) 
+<img src="https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/scosman/9f8457cc9d44ab16ff8b9f1a977d25bb/raw/test_count_kiln.json" alt="Test Count Badge">
 
 Kilntainers is an [MCP server](https://modelcontextprotocol.io/) that gives LLM agents isolated Linux sandboxes for executing shell commands. It exposes a single tool — `sandbox_exec` — providing the full power of a Linux command line in an ephemeral, secure environment.
 
