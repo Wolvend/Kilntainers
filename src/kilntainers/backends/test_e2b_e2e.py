@@ -87,6 +87,22 @@ class TestE2BSmoke:
             await sb.exec(request)
 
 
+# --- Validation behavior with invalid token on real API ---
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_validate_with_fake_token_raises_backend_error():
+    """validate() raises BackendError when E2B token is invalid."""
+    config = E2BBackendConfig(api_key="fake-e2b-token")
+    backend = E2BBackend(config)
+
+    with pytest.raises(BackendError) as exc_info:
+        await backend.validate()
+
+    assert "validation failed" in str(exc_info.value).lower()
+
+
 # --- Non-async tests (no event loop issues) ---
 
 

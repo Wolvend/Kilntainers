@@ -132,9 +132,13 @@ class E2BBackend(Backend):
         Checks that E2B authentication is configured and the API is reachable.
         """
         try:
-            # Validate auth by listing sandboxes (lightweight API call)
-            # list() returns a paginator synchronously; accessing it validates auth
-            AsyncSandbox.list(**self._get_api_params())
+            # Validate auth by listing sandboxes and fetching one page.
+            # AsyncSandbox.list() is lazy and returns a paginator; next_items()
+            # forces the API call so auth/connection errors surface here.
+            paginator = AsyncSandbox.list(limit=1, **self._get_api_params())
+            next_items = getattr(paginator, "next_items", None)
+            if callable(next_items):
+                await next_items()
         except Exception as e:
             raise BackendError(f"E2B validation failed: {e}")
 
