@@ -53,12 +53,12 @@ Add to your MCP client (Claude Desktop, Cursor, etc.):
 ## How It Works
 
 ```
-┌─────────────┐     MCP     ┌──────────────┐      ┌─────────────────────────┐
-│  LLM Agent  │◄───────────►│  Kilntainers │◄────►│  Sandboxes              │
-│  (client)   │             │  MCP Server  │      │  - Docker/Podman        │
-│             │             │              │      │  - Cloud VM (Modal,E2B) │
-│             │             │              │      │  - WASM Sandbox         │
-└─────────────┘             └──────────────┘      └─────────────────────────┘
+┌─────────────┐   MCP   ┌──────────────┐      ┌─────────────────────────┐
+│  LLM Agent  │◄───────►│  Kilntainers │◄────►│  Sandboxes              │
+│  (client)   │         │  MCP Server  │      │  - Docker/Podman        │
+│             │         │              │      │  - Cloud VM (Modal,E2B) │
+│             │         │              │      │  - WASM Sandbox         │
+└─────────────┘         └──────────────┘      └─────────────────────────┘
 ```
 
 1. An MCP client connects to Kilntainers
