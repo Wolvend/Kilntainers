@@ -24,7 +24,7 @@ Kilntainers is an MCP server that gives LLM agents isolated Linux sandboxes for 
 - 🧹 **Ephemeral:** Sandboxes live for the duration of the MCP session, then are shut down and cleaned up automatically.
 - 🔒 **Secure by design:** The agent communicates *with* the sandbox over MCP — it doesn’t run *inside* it. No agent API keys, code, or prompts are exposed to the sandbox.
 - 🔌 **Simple MCP interface:** A single MCP tool, `sandbox_exec`, lets your agent run any Linux command.
-- 📈 **Scalable:** Scale from a single agent on your laptop to thousands running in parallel in the cloud.
+- 📈 **Scalable:** Scale from a few agents on your laptop to thousands running in parallel in the cloud.
 
 ## Why Kilntainers?
 
