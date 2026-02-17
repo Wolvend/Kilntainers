@@ -1,7 +1,7 @@
 <p align="center">
     <a href="https://kiln.tech">
         <picture>
-          <img width="380" alt="Kilntainers by Kiln AI Logo" src="https://github.com/user-attachments/assets/6c5fd372-c5d7-484e-929f-e26467dad75e" />
+          <img width="380" alt="Kilntainers by Kiln AI Logo" src="https://github.com/user-attachments/assets/09009b2a-1310-432b-941d-54ebf1fb78a8" />
         </picture>
     </a>
 </p>
