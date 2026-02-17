@@ -137,12 +137,7 @@ Requires Python 3.13+. Docker backend requires Docker or Podman. The Modal and E
 ## CLI Reference
 
 ```
-usage: kilntainers [-h] [--backend {docker,go_busybox,modal,wasm}] [--transport {stdio,http}] [--host HOST] [--port PORT] [--timeout TIMEOUT]
-                   [--output-limit OUTPUT_LIMIT] [--session-timeout SESSION_TIMEOUT] [--shell SHELL] [--network]
-                   [--tool-instruction-override TOOL_INSTRUCTION_OVERRIDE] [--extended-tool-instruction EXTENDED_TOOL_INSTRUCTION] [--engine ENGINE]
-                   [--docker-host DOCKER_HOST] [--image IMAGE] [--cpu CPU] [--memory MEMORY] [--docker-run-flag DOCKER_RUN_FLAGS] [--modal-token-id MODAL_TOKEN_ID]
-                   [--modal-token-secret MODAL_TOKEN_SECRET] [--modal-app-name MODAL_APP_NAME] [--modal-cpu MODAL_CPU] [--modal-memory MODAL_MEMORY] [--gpu GPU]
-                   [--region REGION] [--sandbox-timeout SANDBOX_TIMEOUT] [--wasm-path WASM_PATH] [--wasm-max-memory WASM_MAX_MEMORY] [--wasm-fuel WASM_FUEL]
+usage: kilntainers [-h] [--backend {docker,go_busybox,modal,wasm}] [--transport {stdio,http}] [...]
 
 MCP server providing isolated Linux sandboxes for LLM agent shell execution.
 
