@@ -12,6 +12,7 @@
 <p align="center">
   <a href="https://github.com/Kiln-AI/kilntainers/actions/workflows/build_and_test.yml"><img src="https://github.com/Kiln-AI/kilntainers/actions/workflows/build_and_test.yml/badge.svg" alt="Build and Test"></a>
   <a href="https://github.com/Kiln-AI/kilntainers/actions/workflows/test_count.yml"><img src="https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/scosman/9f8457cc9d44ab16ff8b9f1a977d25bb/raw/test_count_kiln.json" alt="Test Count Badge"></a>
+<a href="https://pypi.org/project/kilntainers/"><img src="https://img.shields.io/pypi/v/kilntainers.svg?logo=pypi&label=PyPI&logoColor=gold" alt="PyPi"></a>
   <a href="https://kiln.tech/discord"><img src="https://img.shields.io/badge/Discord-Kiln_AI-blue?logo=Discord&logoColor=white" alt="Discord"></a>
   <a href="https://kiln.tech/blog"><img src="https://img.shields.io/badge/Newsletter-subscribe-blue?logo=mailboxdotorg&logoColor=white" alt="Newsletter"></a>
 </p>
