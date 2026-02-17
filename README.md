@@ -73,14 +73,16 @@ Add to your MCP client (Claude Desktop, Cursor, etc.):
 
 ## Backend Examples
 
+See the [CLI Reference](#cli-reference) for all arguments.
+
 ### Docker and Podman (default)
 
 Local containers via Docker or Podman. Any OCI image works.
 
 ```bash
 kilntainers                                     # Docker + debian-slim (defaults)
-kilntainers --image=alpine --engine=podman      # Podman + Alpine
-kilntainers --image=node:22 --network           # Node.js with networking
+kilntainers --image alpine --engine podman      # Podman + Alpine
+kilntainers --image node:22 --network           # Node.js with networking
 ```
 
 ### Cloud Containers & VMs
@@ -90,8 +92,8 @@ kilntainers --image=node:22 --network           # Node.js with networking
 Hosted containers with sub-second startup via [Modal.com](https://modal.com). Scales to thousands of parallel sandboxes. Supports GPUs.
 
 ```bash
-kilntainers --backend=modal
-kilntainers --backend=modal --gpu=A10G --region=us-east  # GPU-accelerated
+kilntainers --backend modal
+kilntainers --backend modal --gpu A10G --region us-east  # GPU-accelerated
 ```
 
 Authenticate via `modal setup` CLI or `--modal-token-id` / `--modal-token-secret` flags.
@@ -101,8 +103,8 @@ Authenticate via `modal setup` CLI or `--modal-token-id` / `--modal-token-secret
 Cloud hosted micro-VM sandboxes from [E2B](https://e2b.dev).
 
 ```bash
-kilntainers --backend=e2b # Default Debian image
-kilntainers --backend=e2b --e2b-api-key=ABCD --e2b-template=my-custom-alpine # Custom image 
+kilntainers --backend e2b # Default Debian image
+kilntainers --backend e2b --e2b-api-key ABCD --e2b-template my-custom-alpine # Custom image 
 ```
 
 Authenticate with `--e2b-api-key` CLI arg, or `E2B_API_KEY` environment variable.
@@ -113,7 +115,7 @@ Runs [go-busybox](https://github.com/rcarmo/go-busybox) in a WebAssembly sandbox
 
 ```bash
 uv tool install kilntainers[wasm]  # WASM support is an optional dependency (+15MB)
-kilntainers --backend=go_busybox
+kilntainers --backend go_busybox
 ```
 
 ### WASM Runner
@@ -121,7 +123,7 @@ kilntainers --backend=go_busybox
 Run a custom WASM module as the sandbox backend. Provides agents a set tools compiled to WebAssembly, and an isolated filesystem.
 
 ```bash
-kilntainers --backend=wasm --wasm-path=./my_tool.wasm
+kilntainers --backend wasm --wasm-path ./my_tool.wasm
 ```
 
 ## Installation
