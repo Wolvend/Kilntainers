@@ -1,13 +1,26 @@
-# Kilntainers 
-### Give every agent its own isolated Linux sandbox, via MCP
+<p align="center">
+    <a href="https://kiln.tech">
+        <picture>
+          <img width="380" alt="Kilntainers by Kiln AI Logo" src="https://github.com/user-attachments/assets/6c5fd372-c5d7-484e-929f-e26467dad75e" />
+        </picture>
+    </a>
+</p>
+<h3 align="center">
+  Give Each Agent Its Own Isolated Linux Sandbox — via MCP
+</h3>
 
-[![Build and Test](https://github.com/Kiln-AI/kilntainers/actions/workflows/build_and_test.yml/badge.svg)](https://github.com/Kiln-AI/kilntainers/actions/workflows/build_and_test.yml) [![Format and Lint](https://github.com/Kiln-AI/kilntainers/actions/workflows/format_and_lint.yml/badge.svg)](https://github.com/Kiln-AI/kilntainers/actions/workflows/format_and_lint.yml) 
-<img src="https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/scosman/9f8457cc9d44ab16ff8b9f1a977d25bb/raw/test_count_kiln.json" alt="Test Count Badge">
+<p align="center">
+  <a href="https://github.com/Kiln-AI/kilntainers/actions/workflows/build_and_test.yml"><img src="https://github.com/Kiln-AI/kilntainers/actions/workflows/build_and_test.yml/badge.svg" alt="Build and Test"></a>
+  <a href="https://github.com/Kiln-AI/kilntainers/actions/workflows/test_count.yml"><img src="https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/scosman/9f8457cc9d44ab16ff8b9f1a977d25bb/raw/test_count_kiln.json" alt="Test Count Badge"></a>
+  <a href="https://kiln.tech/discord"><img src="https://img.shields.io/badge/Discord-Kiln_AI-blue?logo=Discord&logoColor=white" alt="Discord"></a>
+  <a href="https://kiln.tech/blog"><img src="https://img.shields.io/badge/Newsletter-subscribe-blue?logo=mailboxdotorg&logoColor=white" alt="Newsletter"></a>
+</p>
 
-Kilntainers is an [MCP server](https://modelcontextprotocol.io/) that gives LLM agents isolated Linux sandboxes for executing shell commands. 
+Kilntainers is an MCP server that gives LLM agents isolated Linux sandboxes for executing shell commands. 
 
 - 🧰 **Multiple backends:** Local containers (Docker, Podman), cloud-hosted VMs ([Modal](https://modal.com), [E2B](https://e2b.dev)), and WebAssembly sandboxes (WASM BusyBox, or any WASM module).
-- 🧹 **Ephemeral sandboxes:** Each agent gets its own sandbox for the duration of its MCP session. After the session ends, resources are shut down and cleaned up.
+- 🏝️ **Isolated per agent:** Every agent gets its own dedicated sandbox — no shared state, no cross-contamination.
+- 🧹 **Ephemeral:** Sandboxes live for the duration of the MCP session, then are shut down and cleaned up automatically.
 - 🔒 **Secure by design:** The agent communicates *with* the sandbox over MCP — it doesn’t run *inside* it. No agent API keys, code, or prompts are exposed to the sandbox.
 - 🔌 **Simple MCP interface:** A single MCP tool, `sandbox_exec`, lets your agent run any Linux command.
 - 📈 **Scalable:** Scale from a single agent on your laptop to thousands running in parallel in the cloud.
