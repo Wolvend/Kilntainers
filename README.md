@@ -67,9 +67,9 @@ Add to your MCP client (Claude Desktop, Cursor, etc.):
 3. Commands run inside the sandbox; stdout, stderr, and exit code are returned
 4. When the session ends, the sandbox is destroyed and resources are cleaned up. 
 
-**Security** The agent communicates *with* the sandbox over MCP — it doesn't run *inside* it. This is intentional: agents often need secrets (API keys, system prompts, code), and those should never be exposed inside a sandbox where a prompt injection could exfiltrate them.
+**Security:** The agent communicates *with* the sandbox over MCP — it doesn't run *inside* it. This is intentional: agents often need secrets (API keys, system prompts, code), and those should never be exposed inside a sandbox where a prompt injection could exfiltrate them.
 
-**Agent Isolation**: Each MCP connection will start it's own isolated sandbox. Running the server in http mode can mean many sandboxes per server; or a single sandbox if running in stdio mode.
+**Agent isolation:** Each MCP connection starts its own isolated sandbox. In streaming HTTP mode, a single MCP server can host many sandboxes in parallel; in stdio mode, it runs a single sandbox per server process.
 
 ## Backend Examples
 
