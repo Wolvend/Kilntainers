@@ -18,7 +18,7 @@
 
 Kilntainers is an MCP server that gives LLM agents isolated Linux sandboxes for executing shell commands. 
 
-- 🧰 **Multiple backends:** Local containers (Docker, Podman), cloud-hosted VMs ([Modal](https://modal.com), [E2B](https://e2b.dev)), and WebAssembly sandboxes (WASM BusyBox, or any WASM module).
+- 🧰 **Multiple backends:** Containers (Docker, Podman), cloud-hosted micro-VMs ([Modal](https://modal.com), [E2B](https://e2b.dev)), and WebAssembly sandboxes (WASM BusyBox, or any WASM module).
 - 🏝️ **Isolated per agent:** Every agent gets its own dedicated sandbox — no shared state, no cross-contamination.
 - 🧹 **Ephemeral:** Sandboxes live for the duration of the MCP session, then are shut down and cleaned up automatically.
 - 🔒 **Secure by design:** The agent communicates *with* the sandbox over MCP — it doesn’t run *inside* it. No agent API keys, code, or prompts are exposed to the sandbox.
