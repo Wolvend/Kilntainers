@@ -123,6 +123,7 @@ kilntainers --backend go_busybox
 Run a custom WASM module as the sandbox backend. Provides agents a set tools compiled to WebAssembly, and an isolated filesystem.
 
 ```bash
+uv tool install kilntainers[wasm]  # WASM support is an optional dependency (+15MB)
 kilntainers --backend wasm --wasm-path ./my_tool.wasm
 ```
 
