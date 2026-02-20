@@ -69,7 +69,7 @@ Add to your MCP client (Claude Desktop, Cursor, etc.):
 
 **Security:** The agent communicates *with* the sandbox over MCP — it doesn't run *inside* it. This is intentional: agents often need secrets (API keys, system prompts, code), and those should never be exposed inside a sandbox where a prompt injection could exfiltrate them.
 
-**Agent isolation:** Each MCP connection starts its own isolated sandbox. In streaming HTTP mode, a single MCP server can host many sandboxes in parallel; in stdio mode, it runs a single sandbox per server process.
+**Agent Isolation & Sandbox Lifecycle:** Each MCP connection starts its own isolated sandbox. In streaming HTTP mode, a single MCP server can host many sandboxes in parallel, and `exec` calls are routed to the sandbox associated with that connection. In stdio mode, the server runs a single sandbox per process. When a connection closes, its sandbox is shut down and deleted.
 
 ## Backend Examples
 
