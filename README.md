@@ -6,7 +6,7 @@
     </a>
 </p>
 <h3 align="center">
-  Give Agents Isolated Linux Sandboxes — via MCP
+  Give Every Agents an Ephemeral Linux Sandboxes — via MCP
 </h3>
 
 <p align="center">
