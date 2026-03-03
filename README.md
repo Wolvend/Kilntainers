@@ -32,14 +32,16 @@ Agents are already excellent at using terminals, and can save thousands of token
 
 ## Quick Start
 
-Install and run:
+Install and run from CLI:
 
 ```bash
+# install
 uv tool install kilntainers
-kilntainers  # starts with defaults: stdio MCP server, Docker, and Debian-slim
+# starts with defaults: stdio MCP server, Docker, and Debian-slim (see options below)
+kilntainers
 ```
 
-Add to your MCP client (Claude Desktop, Cursor, etc.):
+Add to your MCP client (Claude, Cursor, etc.):
 
 ```json
 {
